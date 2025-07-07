@@ -290,7 +290,6 @@ export class ApiKeyHeader extends LitElement {
         this.handleSubmit = this.handleSubmit.bind(this);
         this.handleInput = this.handleInput.bind(this);
         this.handleAnimationEnd = this.handleAnimationEnd.bind(this);
-        this.handleUsePicklesKey = this.handleUsePicklesKey.bind(this);
         this.handleProviderChange = this.handleProviderChange.bind(this);
     }
 
@@ -516,15 +515,6 @@ export class ApiKeyHeader extends LitElement {
         this.classList.add('sliding-out');
     }
 
-    handleUsePicklesKey(e) {
-        e.preventDefault();
-        if (this.wasJustDragged) return;
-
-        console.log('Requesting Firebase authentication from main process...');
-        if (window.require) {
-            window.require('electron').ipcRenderer.invoke('start-firebase-auth');
-        }
-    }
 
     handleClose() {
         console.log('Close button clicked');
@@ -610,9 +600,6 @@ export class ApiKeyHeader extends LitElement {
                         ${this.isLoading ? 'Validating...' : 'Confirm'}
                     </button>
 
-                    <div class="or-text">or</div>
-
-                    <button class="action-button" @click=${this.handleUsePicklesKey}>Use Pickle's API Key</button>
                 </div>
             </div>
         `;

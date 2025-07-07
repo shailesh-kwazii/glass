@@ -264,16 +264,9 @@ class SttService {
             },
         };
 
-        // Determine auth options for providers that support it
-        const authService = require('../../../common/services/authService');
-        const userState = authService.getCurrentUser();
-        const loggedIn = userState.isLoggedIn;
-        
         const sttOptions = {
             apiKey: API_KEY,
-            language: effectiveLanguage,
-            usePortkey: !isGemini && loggedIn, // Only OpenAI supports Portkey
-            portkeyVirtualKey: loggedIn ? API_KEY : undefined
+            language: effectiveLanguage
         };
 
         [this.mySttSession, this.theirSttSession] = await Promise.all([

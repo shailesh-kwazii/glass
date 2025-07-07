@@ -70,9 +70,7 @@ async function sendMessage(userPrompt) {
             apiKey: API_KEY,
             model: provider === 'openai' ? 'gpt-4.1' : 'gemini-2.5-flash',
             temperature: 0.7,
-            maxTokens: 2048,
-            usePortkey: provider === 'openai' && isLoggedIn,
-            portkeyVirtualKey: isLoggedIn ? API_KEY : undefined
+            maxTokens: 2048
         });
 
         const response = await streamingLLM.streamChat(messages);

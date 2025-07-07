@@ -162,9 +162,7 @@ Keep all points concise and build upon previous analysis if provided.`,
                 apiKey: API_KEY,
                 model: provider === 'openai' ? 'gpt-4.1' : 'gemini-2.5-flash',
                 temperature: 0.7,
-                maxTokens: 1024,
-                usePortkey: provider === 'openai' && loggedIn,
-                portkeyVirtualKey: loggedIn ? API_KEY : undefined
+                maxTokens: 1024
             });
 
             const completion = await llm.chat(messages);
