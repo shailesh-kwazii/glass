@@ -6,7 +6,12 @@ const fs = require('node:fs');
 const os = require('os');
 const util = require('util');
 const execFile = util.promisify(require('child_process').execFile);
-const sharp = require('sharp');
+let sharp = null;
+try {
+    sharp = require('sharp');
+} catch (error) {
+    console.log('[WindowManager] sharp not available, screenshot functionality may be limited');
+}
 const authService = require('../common/services/authService');
 const systemSettingsRepository = require('../common/repositories/systemSettings');
 const userRepository = require('../common/repositories/user');
@@ -14,7 +19,7 @@ const fetch = require('node-fetch');
 
 
 /* ────────────────[ GLASS BYPASS ]─────────────── */
-let liquidGlass;
+let liquidGlass = null;
 const isLiquidGlassSupported = () => {
     if (process.platform !== 'darwin') {
         return false;
@@ -1436,14 +1441,18 @@ async function captureScreenshot(options = {}) {
             const imageBuffer = await fs.promises.readFile(tempPath);
             await fs.promises.unlink(tempPath);
 
-            const resizedBuffer = await sharp(imageBuffer)
-                // .resize({ height: 1080 })
-                .resize({ height: 384 })
-                .jpeg({ quality: 80 })
-                .toBuffer();
+            let resizedBuffer = imageBuffer;
+            let metadata = { width: 1920, height: 1080 }; // Default values
+
+            if (sharp) {
+                resizedBuffer = await sharp(imageBuffer)
+                    .resize({ height: 384 })
+                    .jpeg({ quality: 80 })
+                    .toBuffer();
+                metadata = await sharp(resizedBuffer).metadata();
+            }
 
             const base64 = resizedBuffer.toString('base64');
-            const metadata = await sharp(resizedBuffer).metadata();
 
             lastScreenshot = {
                 base64,
