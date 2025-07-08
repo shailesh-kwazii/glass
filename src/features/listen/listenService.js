@@ -1,6 +1,5 @@
 const { BrowserWindow } = require('electron');
 const SttService = require('./stt/sttService');
-const SummaryService = require('./summary/summaryService');
 const authService = require('../../common/services/authService');
 const sessionRepository = require('../../common/repositories/session');
 const sttRepository = require('./stt/repositories');
@@ -8,7 +7,6 @@ const sttRepository = require('./stt/repositories');
 class ListenService {
     constructor() {
         this.sttService = new SttService();
-        this.summaryService = new SummaryService();
         this.currentSessionId = null;
         this.isInitializingSession = false;
         
@@ -26,15 +24,6 @@ class ListenService {
             }
         });
 
-        // Summary service callbacks
-        this.summaryService.setCallbacks({
-            onAnalysisComplete: (data) => {
-                console.log('📊 Analysis completed:', data);
-            },
-            onStatusUpdate: (status) => {
-                this.sendToRenderer('update-status', status);
-            }
-        });
     }
 
     sendToRenderer(channel, data) {
@@ -51,8 +40,6 @@ class ListenService {
         // Save to database
         await this.saveConversationTurn(speaker, text);
         
-        // Add to summary service for analysis
-        this.summaryService.addConversationTurn(speaker, text);
     }
 
     async saveConversationTurn(speaker, transcription) {
@@ -85,11 +72,6 @@ class ListenService {
             this.currentSessionId = await sessionRepository.getOrCreateActive(uid, 'listen');
             console.log(`[DB] New listen session ensured: ${this.currentSessionId}`);
 
-            // Set session ID for summary service
-            this.summaryService.setSessionId(this.currentSessionId);
-            
-            // Reset conversation history
-            this.summaryService.resetConversationHistory();
 
             console.log('New conversation session started:', this.currentSessionId);
             return true;
@@ -168,7 +150,6 @@ class ListenService {
 
             // Reset state
             this.currentSessionId = null;
-            this.summaryService.resetConversationHistory();
 
             this.sendToRenderer('session-state-changed', { isActive: false });
             this.sendToRenderer('session-did-close');
@@ -184,14 +165,14 @@ class ListenService {
     getCurrentSessionData() {
         return {
             sessionId: this.currentSessionId,
-            conversationHistory: this.summaryService.getConversationHistory(),
-            totalTexts: this.summaryService.getConversationHistory().length,
-            analysisData: this.summaryService.getCurrentAnalysisData(),
+            conversationHistory: [],
+            totalTexts: 0,
+            analysisData: {},
         };
     }
 
     getConversationHistory() {
-        return this.summaryService.getConversationHistory();
+        return [];
     }
 
     setupIpcHandlers() {

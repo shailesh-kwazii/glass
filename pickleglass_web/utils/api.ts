@@ -41,18 +41,6 @@ export interface AiMessage {
   sync_state: 'clean' | 'dirty';
 }
 
-export interface Summary {
-  session_id: string;
-  generated_at: number;
-  model?: string;
-  text: string;
-  tldr: string;
-  bullet_json: string;
-  action_json: string;
-  tokens_used?: number;
-  updated_at: number;
-  sync_state: 'clean' | 'dirty';
-}
 
 export interface PromptPreset {
   id: string;
@@ -68,7 +56,6 @@ export interface SessionDetails {
     session: Session;
     transcripts: Transcript[];
     ai_messages: AiMessage[];
-    summary: Summary | null;
 }
 
 

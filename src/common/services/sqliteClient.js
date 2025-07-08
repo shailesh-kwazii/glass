@@ -88,8 +88,7 @@ class SQLiteClient {
             SELECT s.id FROM sessions s
             LEFT JOIN transcripts t ON s.id = t.session_id
             LEFT JOIN ai_messages a ON s.id = a.session_id
-            LEFT JOIN summaries su ON s.id = su.session_id
-            WHERE t.id IS NULL AND a.id IS NULL AND su.session_id IS NULL
+            WHERE t.id IS NULL AND a.id IS NULL
         `;
 
         const rows = this.db.prepare(query).all();

@@ -1,6 +1,5 @@
 import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
 import './stt/SttView.js';
-import './summary/SummaryView.js';
 
 export class AssistantView extends LitElement {
     static styles = css`
@@ -275,14 +274,11 @@ export class AssistantView extends LitElement {
         :host-context(body.has-glass) .toggle-button,
         :host-context(body.has-glass) .copy-button,
         :host-context(body.has-glass) .transcription-container,
-        :host-context(body.has-glass) .insights-container,
         :host-context(body.has-glass) .stt-message,
         :host-context(body.has-glass) .outline-item,
         :host-context(body.has-glass) .request-item,
         :host-context(body.has-glass) .markdown-content,
-        :host-context(body.has-glass) .insights-container pre,
-        :host-context(body.has-glass) .insights-container p code,
-        :host-context(body.has-glass) .insights-container pre code {
+ {
             background: transparent !important;
             border: none !important;
             outline: none !important;
@@ -306,9 +302,7 @@ export class AssistantView extends LitElement {
         }
 
         :host-context(body.has-glass) .transcription-container::-webkit-scrollbar-track,
-        :host-context(body.has-glass) .transcription-container::-webkit-scrollbar-thumb,
-        :host-context(body.has-glass) .insights-container::-webkit-scrollbar-track,
-        :host-context(body.has-glass) .insights-container::-webkit-scrollbar-thumb {
+        :host-context(body.has-glass) .transcription-container::-webkit-scrollbar-thumb {
             background: transparent !important;
         }
         :host-context(body.has-glass) * {
@@ -338,14 +332,11 @@ export class AssistantView extends LitElement {
         :host-context(body.has-glass) .toggle-button,
         :host-context(body.has-glass) .copy-button,
         :host-context(body.has-glass) .transcription-container,
-        :host-context(body.has-glass) .insights-container,
         :host-context(body.has-glass) .stt-message,
         :host-context(body.has-glass) .outline-item,
         :host-context(body.has-glass) .request-item,
         :host-context(body.has-glass) .markdown-content,
-        :host-context(body.has-glass) .insights-container pre,
-        :host-context(body.has-glass) .insights-container p code,
-        :host-context(body.has-glass) .insights-container pre code {
+ {
             background: transparent !important;
             border: none !important;
             outline: none !important;
@@ -369,9 +360,7 @@ export class AssistantView extends LitElement {
         }
 
         :host-context(body.has-glass) .transcription-container::-webkit-scrollbar-track,
-        :host-context(body.has-glass) .transcription-container::-webkit-scrollbar-thumb,
-        :host-context(body.has-glass) .insights-container::-webkit-scrollbar-track,
-        :host-context(body.has-glass) .insights-container::-webkit-scrollbar-thumb {
+        :host-context(body.has-glass) .transcription-container::-webkit-scrollbar-thumb {
             background: transparent !important;
         }
         :host-context(body.has-glass) * {
@@ -413,7 +402,7 @@ export class AssistantView extends LitElement {
         super();
         this.isSessionActive = false;
         this.hasCompletedRecording = false;
-        this.viewMode = 'insights';
+        this.viewMode = 'transcript';
         this.isHovering = false;
         this.isAnimating = false;
         this.elapsedTime = '00:00';
@@ -445,9 +434,7 @@ export class AssistantView extends LitElement {
                     // Reset child components
                     this.updateComplete.then(() => {
                         const sttView = this.shadowRoot.querySelector('stt-view');
-                        const summaryView = this.shadowRoot.querySelector('summary-view');
                         if (sttView) sttView.resetTranscript();
-                        if (summaryView) summaryView.resetAnalysis();
                     });
                     this.requestUpdate();
                 }
@@ -499,9 +486,7 @@ export class AssistantView extends LitElement {
         this.updateComplete
             .then(() => {
                 const topBar = this.shadowRoot.querySelector('.top-bar');
-                const activeContent = this.viewMode === 'transcript'
-                    ? this.shadowRoot.querySelector('stt-view')
-                    : this.shadowRoot.querySelector('summary-view');
+                const activeContent = this.shadowRoot.querySelector('stt-view');
 
                 if (!topBar || !activeContent) return;
 
@@ -525,10 +510,6 @@ export class AssistantView extends LitElement {
             });
     }
 
-    toggleViewMode() {
-        this.viewMode = this.viewMode === 'insights' ? 'transcript' : 'insights';
-        this.requestUpdate();
-    }
 
     handleCopyHover(isHovering) {
         this.isHovering = isHovering;
@@ -545,13 +526,8 @@ export class AssistantView extends LitElement {
 
         let textToCopy = '';
 
-        if (this.viewMode === 'transcript') {
-            const sttView = this.shadowRoot.querySelector('stt-view');
-            textToCopy = sttView ? sttView.getTranscriptText() : '';
-        } else {
-            const summaryView = this.shadowRoot.querySelector('summary-view');
-            textToCopy = summaryView ? summaryView.getSummaryText() : '';
-        }
+        const sttView = this.shadowRoot.querySelector('stt-view');
+        textToCopy = sttView ? sttView.getTranscriptText() : '';
 
         try {
             await navigator.clipboard.writeText(textToCopy);
@@ -607,11 +583,7 @@ export class AssistantView extends LitElement {
 
     render() {
         const displayText = this.isHovering
-            ? this.viewMode === 'transcript'
-                ? 'Copy Transcript'
-                : 'Copy Glass Analysis'
-            : this.viewMode === 'insights'
-            ? `Live insights`
+            ? 'Copy Transcript'
             : `Glass is Listening ${this.elapsedTime}`;
 
         return html`
@@ -621,23 +593,6 @@ export class AssistantView extends LitElement {
                         <span class="bar-left-text-content ${this.isAnimating ? 'slide-in' : ''}">${displayText}</span>
                     </div>
                     <div class="bar-controls">
-                        <button class="toggle-button" @click=${this.toggleViewMode}>
-                            ${this.viewMode === 'insights'
-                                ? html`
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-                                          <circle cx="12" cy="12" r="3" />
-                                      </svg>
-                                      <span>Show Transcript</span>
-                                  `
-                                : html`
-                                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                          <path d="M9 11l3 3L22 4" />
-                                          <path d="M22 12v7a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h11" />
-                                      </svg>
-                                      <span>Show Insights</span>
-                                  `}
-                        </button>
                         <button
                             class="copy-button ${this.copyState === 'copied' ? 'copied' : ''}"
                             @click=${this.handleCopy}
@@ -656,14 +611,9 @@ export class AssistantView extends LitElement {
                 </div>
 
                 <stt-view 
-                    .isVisible=${this.viewMode === 'transcript'}
+                    .isVisible=${true}
                     @stt-messages-updated=${this.handleSttMessagesUpdated}
                 ></stt-view>
-
-                <summary-view 
-                    .isVisible=${this.viewMode === 'insights'}
-                    .hasCompletedRecording=${this.hasCompletedRecording}
-                ></summary-view>
             </div>
         `;
     }

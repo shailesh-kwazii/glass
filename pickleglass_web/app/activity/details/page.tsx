@@ -126,33 +126,6 @@ function SessionDetailsContent() {
                     </button>
                 </div>
 
-                {sessionDetails.summary && (
-                    <Section title="Summary">
-                        <p className="text-lg italic text-gray-600 mb-4">"{sessionDetails.summary.tldr}"</p>
-                        
-                        {sessionDetails.summary.bullet_json && JSON.parse(sessionDetails.summary.bullet_json).length > 0 &&
-                            <div className="mt-4">
-                                <h3 className="font-semibold text-gray-700 mb-2">Key Points:</h3>
-                                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                                    {JSON.parse(sessionDetails.summary.bullet_json).map((point: string, index: number) => (
-                                        <li key={index}>{point}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        }
-
-                        {sessionDetails.summary.action_json && JSON.parse(sessionDetails.summary.action_json).length > 0 &&
-                            <div className="mt-4">
-                                <h3 className="font-semibold text-gray-700 mb-2">Action Items:</h3>
-                                <ul className="list-disc list-inside space-y-1 text-gray-600">
-                                    {JSON.parse(sessionDetails.summary.action_json).map((action: string, index: number) => (
-                                        <li key={index}>{action}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        }
-                    </Section>
-                )}
                 
                 {sessionDetails.transcripts && sessionDetails.transcripts.length > 0 && (
                     <Section title="Listen: Transcript">

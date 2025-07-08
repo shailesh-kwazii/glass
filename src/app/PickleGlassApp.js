@@ -70,9 +70,6 @@ export class PickleGlassApp extends LitElement {
         this.outlines = [];
         this.analysisRequests = [];
 
-        window.pickleGlass.setStructuredData = data => {
-            this.updateStructuredData(data);
-        };
     }
 
     connectedCallback() {
@@ -164,13 +161,6 @@ export class PickleGlassApp extends LitElement {
             window.pickleGlass.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
         }
 
-        // 🔄 Clear previous summary/analysis when a new listening session begins
-        this.structuredData = {
-            summary: [],
-            topic: { header: '', bullets: [] },
-            actions: [],
-            followUps: [],
-        };
 
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
@@ -233,17 +223,6 @@ export class PickleGlassApp extends LitElement {
     //     this.requestUpdate();
     // }
 
-    updateStructuredData(data) {
-        console.log('📝 PickleGlassApp updateStructuredData:', data);
-        this.structuredData = data;
-        this.requestUpdate();
-        
-        const assistantView = this.shadowRoot?.querySelector('assistant-view');
-        if (assistantView) {
-            assistantView.structuredData = data;
-            console.log('✅ Structured data passed to AssistantView');
-        }
-    }
 
     handleResponseIndexChanged(e) {
         this.currentResponseIndex = e.detail.index;
@@ -255,7 +234,6 @@ export class PickleGlassApp extends LitElement {
                 return html`<assistant-view
                     .currentResponseIndex=${this.currentResponseIndex}
                     .selectedProfile=${this.selectedProfile}
-                    .structuredData=${this.structuredData}
                     .onSendText=${message => this.handleSendText(message)}
                     @response-index-changed=${e => (this.currentResponseIndex = e.detail.index)}
                 ></assistant-view>`;

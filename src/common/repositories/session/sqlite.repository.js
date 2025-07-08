@@ -38,7 +38,6 @@ function deleteWithRelatedData(id) {
     const transaction = db.transaction(() => {
         db.prepare("DELETE FROM transcripts WHERE session_id = ?").run(id);
         db.prepare("DELETE FROM ai_messages WHERE session_id = ?").run(id);
-        db.prepare("DELETE FROM summaries WHERE session_id = ?").run(id);
         db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
     });
     

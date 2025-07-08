@@ -47,20 +47,6 @@ const LATEST_SCHEMA = {
             { name: 'sync_state', type: 'TEXT DEFAULT \'clean\'' }
         ]
     },
-    summaries: {
-        columns: [
-            { name: 'session_id', type: 'TEXT PRIMARY KEY' },
-            { name: 'generated_at', type: 'INTEGER' },
-            { name: 'model', type: 'TEXT' },
-            { name: 'text', type: 'TEXT' },
-            { name: 'tldr', type: 'TEXT' },
-            { name: 'bullet_json', type: 'TEXT' },
-            { name: 'action_json', type: 'TEXT' },
-            { name: 'tokens_used', type: 'INTEGER' },
-            { name: 'updated_at', type: 'INTEGER' },
-            { name: 'sync_state', type: 'TEXT DEFAULT \'clean\'' }
-        ]
-    },
     prompt_presets: {
         columns: [
             { name: 'id', type: 'TEXT PRIMARY KEY' },

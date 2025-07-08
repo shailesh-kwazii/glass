@@ -272,7 +272,6 @@ function setupGeneralIpcHandlers() {
 function setupWebDataHandlers() {
     const sessionRepository = require('./common/repositories/session');
     const sttRepository = require('./features/listen/stt/repositories');
-    const summaryRepository = require('./features/listen/summary/repositories');
     const askRepository = require('./features/ask/repositories');
     const userRepository = require('./common/repositories/user');
     const presetRepository = require('./common/repositories/preset');
@@ -294,8 +293,7 @@ function setupWebDataHandlers() {
                     }
                     const transcripts = sttRepository.getAllTranscriptsBySessionId(payload);
                     const ai_messages = askRepository.getAllAiMessagesBySessionId(payload);
-                    const summary = summaryRepository.getSummaryBySessionId(payload);
-                    result = { session, transcripts, ai_messages, summary };
+                    result = { session, transcripts, ai_messages };
                     break;
                 case 'delete-session':
                     result = sessionRepository.deleteWithRelatedData(payload);
