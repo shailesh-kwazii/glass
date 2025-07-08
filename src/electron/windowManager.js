@@ -598,13 +598,20 @@ function loadAndRegisterShortcuts(movementManager) {
     const defaultKeybinds = getDefaultKeybinds();
     const header = windowPool.get('header');
     const sendToRenderer = (channel, ...args) => {
-        windowPool.forEach(win => {
+        console.log('[DEBUG] sendToRenderer called:', channel, args);
+        let sentCount = 0;
+        windowPool.forEach((win, name) => {
             try {
                 if (win && !win.isDestroyed()) {
                     win.webContents.send(channel, ...args);
+                    sentCount++;
+                    console.log(`[DEBUG] Sent ${channel} to window: ${name}`);
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(`[DEBUG] Error sending to window ${name}:`, e);
+            }
         });
+        console.log(`[DEBUG] sendToRenderer sent to ${sentCount} windows`);
     };
 
 
@@ -1435,18 +1442,20 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, movementMan
     if (keybinds.sendConversation) {
         try {
             globalShortcut.register(keybinds.sendConversation, async () => {
-                console.log('Cmd+/ shortcut triggered');
+                console.log('[DEBUG] Cmd+/ shortcut triggered');
                 
                 // Check if continuous listening is active
-                const isListening = global.continuousListenService.getContinuousListeningState();
+                console.log('[DEBUG] Checking global.continuousListenService:', !!global.continuousListenService);
+                const isListening = global.continuousListenService ? global.continuousListenService.getContinuousListeningState() : false;
+                console.log('[DEBUG] Current listening state:', isListening);
                 
                 if (isListening) {
                     // If listening is ON, toggle it OFF
-                    console.log('Listening is ON, toggling OFF');
+                    console.log('[DEBUG] Listening is ON, sending toggle-continuous-listening to renderer');
                     sendToRenderer('toggle-continuous-listening');
                 } else {
                     // If listening is OFF, send conversation to LLM
-                    console.log('Listening is OFF, sending conversation to LLM');
+                    console.log('[DEBUG] Listening is OFF, sending send-conversation-to-llm to renderer');
                     sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
                 }
             });

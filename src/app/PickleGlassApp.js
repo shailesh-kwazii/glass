@@ -90,8 +90,9 @@ export class PickleGlassApp extends LitElement {
             
             // Handle continuous listening keyboard shortcuts
             ipcRenderer.on('send-conversation-to-llm', async (_, data) => {
-                console.log('Send conversation to LLM triggered', data);
+                console.log('[DEBUG] IPC received: send-conversation-to-llm', data);
                 const result = await ipcRenderer.invoke('send-conversation-to-llm', data);
+                console.log('[DEBUG] send-conversation-to-llm result:', result);
                 if (!result.success) {
                     console.error('Failed to send conversation to LLM');
                 }
@@ -99,10 +100,11 @@ export class PickleGlassApp extends LitElement {
             
             // Handle toggle continuous listening
             ipcRenderer.on('toggle-continuous-listening', async () => {
-                console.log('Toggle continuous listening triggered');
+                console.log('[DEBUG] IPC received: toggle-continuous-listening');
                 const result = await ipcRenderer.invoke('toggle-continuous-listening');
+                console.log('[DEBUG] toggle-continuous-listening result:', result);
                 if (result.success) {
-                    console.log('Continuous listening is now:', result.isListening ? 'ON' : 'OFF');
+                    console.log('[DEBUG] Continuous listening is now:', result.isListening ? 'ON' : 'OFF');
                 } else {
                     console.error('Failed to toggle continuous listening');
                 }
