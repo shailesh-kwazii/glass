@@ -198,8 +198,6 @@ app.whenReady().then(async () => {
         createWindows();
         
         // Start continuous listening after a short delay
-        // TEMPORARILY COMMENTED OUT FOR DEBUGGING
-        /*
         setTimeout(async () => {
             try {
                 await continuousListenService.startContinuousListening();
@@ -208,7 +206,6 @@ app.whenReady().then(async () => {
                 console.error('Failed to start continuous listening:', error);
             }
         }, 2000);
-        */
 
     } catch (err) {
         console.error('>>> [index.js] Database initialization failed - some features may not work', err);

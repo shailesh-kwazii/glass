@@ -155,12 +155,7 @@ class ContinuousListenService {
     }
 
     async stopContinuousListening() {
-        console.log('[DEBUG] stopContinuousListening called');
-        console.log('[DEBUG] Before stop - isListening:', this.isListening);
-        if (!this.isListening) {
-            console.log('[DEBUG] Already not listening, returning');
-            return;
-        }
+        if (!this.isListening) return;
         
         try {
             // Stop audio capture
@@ -188,28 +183,23 @@ class ContinuousListenService {
                 isPaused: false 
             });
             
-            console.log('[DEBUG] Continuous listening stopped');
-            console.log('[DEBUG] After stop - isListening:', this.isListening);
+            console.log('Continuous listening stopped');
         } catch (error) {
-            console.error('[DEBUG] Error stopping continuous listening:', error);
+            console.error('Error stopping continuous listening:', error);
         }
     }
 
     async toggleContinuousListening() {
-        console.log('[DEBUG] toggleContinuousListening called, current state:', this.isListening);
         if (this.isListening) {
             await this.stopContinuousListening();
-            console.log('[DEBUG] After stop, isListening:', this.isListening);
             return false;
         } else {
             await this.startContinuousListening();
-            console.log('[DEBUG] After start, isListening:', this.isListening);
             return true;
         }
     }
 
     getContinuousListeningState() {
-        console.log('[DEBUG] getContinuousListeningState called, returning:', this.isListening);
         return this.isListening;
     }
 
@@ -254,12 +244,24 @@ class ContinuousListenService {
     }
 
     async sendToLLM(includeScreenshot = false) {
-        console.log('[DEBUG] sendToLLM called, includeScreenshot:', includeScreenshot);
-        console.log('[DEBUG] Current listening state:', this.isListening);
-        await this.pauseListening();
+        // Only pause if we're actually listening
+        if (this.isListening && !this.isPaused) {
+            await this.pauseListening();
+        }
         
         try {
             const conversationText = this.getConversationText();
+            
+            // If no conversation history, return early
+            if (!conversationText || this.conversationHistory.length === 0) {
+                this.sendToRenderer('stt-update', {
+                    speaker: 'System',
+                    text: 'No conversation history available. Start listening first to capture audio.',
+                    isPartial: false,
+                    isFinal: true
+                });
+                return;
+            }
             const screenshot = includeScreenshot ? this.currentScreenshot : null;
             
             // Send conversation history to SttView
@@ -412,9 +414,7 @@ class ContinuousListenService {
         });
 
         ipcMain.handle('toggle-continuous-listening', async () => {
-            console.log('[DEBUG] IPC handler: toggle-continuous-listening called');
             const isNowListening = await this.toggleContinuousListening();
-            console.log('[DEBUG] IPC handler: returning isListening:', isNowListening);
             return { success: true, isListening: isNowListening };
         });
 
@@ -423,16 +423,12 @@ class ContinuousListenService {
         });
 
         ipcMain.handle('send-conversation-to-llm', async (event, { includeScreenshot }) => {
-            console.log('[DEBUG] IPC handler: send-conversation-to-llm called, includeScreenshot:', includeScreenshot);
             await this.sendToLLM(includeScreenshot);
             return { success: true };
         });
 
         ipcMain.handle('get-continuous-listening-state', () => {
-            console.log('[DEBUG] IPC handler: get-continuous-listening-state called');
-            const state = this.getContinuousListeningState();
-            console.log('[DEBUG] IPC handler: returning state:', state);
-            return { isListening: state };
+            return { isListening: this.getContinuousListeningState() };
         });
 
         console.log('Continuous listen service IPC handlers registered');
