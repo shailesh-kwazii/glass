@@ -96,6 +96,17 @@ export class PickleGlassApp extends LitElement {
                     console.error('Failed to send conversation to LLM');
                 }
             });
+            
+            // Handle toggle continuous listening
+            ipcRenderer.on('toggle-continuous-listening', async () => {
+                console.log('Toggle continuous listening triggered');
+                const result = await ipcRenderer.invoke('toggle-continuous-listening');
+                if (result.success) {
+                    console.log('Continuous listening is now:', result.isListening ? 'ON' : 'OFF');
+                } else {
+                    console.error('Failed to toggle continuous listening');
+                }
+            });
         }
     }
 
@@ -107,6 +118,7 @@ export class PickleGlassApp extends LitElement {
             ipcRenderer.removeAllListeners('click-through-toggled');
             ipcRenderer.removeAllListeners('start-listening-session');
             ipcRenderer.removeAllListeners('send-conversation-to-llm');
+            ipcRenderer.removeAllListeners('toggle-continuous-listening');
         }
     }
 

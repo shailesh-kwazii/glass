@@ -152,7 +152,7 @@ export class ContinuousListenIndicator extends LitElement {
                 ${this.transcriptionCount > 0 ? html`
                     <span class="transcript-count">(${this.transcriptionCount})</span>
                 ` : ''}
-                <span class="shortcuts">⌘/ or ⌘.</span>
+                <span class="shortcuts">⌘/ ${this.isListening ? 'stop' : 'send'} | ⌘. send+📷</span>
             </div>
         `;
     }

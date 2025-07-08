@@ -189,6 +189,20 @@ class ContinuousListenService {
         }
     }
 
+    async toggleContinuousListening() {
+        if (this.isListening) {
+            await this.stopContinuousListening();
+            return false;
+        } else {
+            await this.startContinuousListening();
+            return true;
+        }
+    }
+
+    getContinuousListeningState() {
+        return this.isListening;
+    }
+
     startScreenshotCapture() {
         // Capture screenshot every 5 seconds
         this.screenshotInterval = setInterval(async () => {
@@ -373,11 +387,6 @@ class ContinuousListenService {
                 isFinal: true
             });
         }
-        
-        // Resume listening after a delay
-        setTimeout(() => {
-            this.resumeListening();
-        }, 2000);
     }
 
     setupIpcHandlers() {
@@ -390,6 +399,11 @@ class ContinuousListenService {
             return { success: true };
         });
 
+        ipcMain.handle('toggle-continuous-listening', async () => {
+            const isNowListening = await this.toggleContinuousListening();
+            return { success: true, isListening: isNowListening };
+        });
+
         ipcMain.handle('get-conversation-history', () => {
             return this.getConversationHistory();
         });
@@ -397,6 +411,10 @@ class ContinuousListenService {
         ipcMain.handle('send-conversation-to-llm', async (event, { includeScreenshot }) => {
             await this.sendToLLM(includeScreenshot);
             return { success: true };
+        });
+
+        ipcMain.handle('get-continuous-listening-state', () => {
+            return { isListening: this.getContinuousListeningState() };
         });
 
         console.log('Continuous listen service IPC handlers registered');

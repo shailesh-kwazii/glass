@@ -1431,17 +1431,28 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, movementMan
         }
     }
 
-    // Command + / handler - Send conversation to LLM
+    // Command + / handler - Toggle listening or send to LLM
     if (keybinds.sendConversation) {
         try {
             globalShortcut.register(keybinds.sendConversation, async () => {
-                console.log('Send conversation shortcut triggered');
-                // Pause audio capture and send conversation to LLM
-                sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
+                console.log('Cmd+/ shortcut triggered');
+                
+                // Check if continuous listening is active
+                const isListening = global.continuousListenService.getContinuousListeningState();
+                
+                if (isListening) {
+                    // If listening is ON, toggle it OFF
+                    console.log('Listening is ON, toggling OFF');
+                    sendToRenderer('toggle-continuous-listening');
+                } else {
+                    // If listening is OFF, send conversation to LLM
+                    console.log('Listening is OFF, sending conversation to LLM');
+                    sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
+                }
             });
-            console.log(`Registered sendConversation: ${keybinds.sendConversation}`);
+            console.log(`Registered Cmd+/ handler: ${keybinds.sendConversation}`);
         } catch (error) {
-            console.error(`Failed to register sendConversation (${keybinds.sendConversation}):`, error);
+            console.error(`Failed to register Cmd+/ handler (${keybinds.sendConversation}):`, error);
         }
     }
 
