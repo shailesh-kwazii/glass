@@ -3,6 +3,9 @@ const SttService = require('./stt/sttService');
 const sessionRepository = require('../../common/repositories/session');
 const sttRepository = require('./stt/repositories');
 const authService = require('../../common/services/authService');
+const { createStreamingLLM } = require('../../common/ai/factory');
+const { getStoredApiKey, getStoredProvider } = require('../../electron/windowManager');
+const { getSystemPrompt } = require('../../common/prompts/promptBuilder');
 
 class ContinuousListenService {
     constructor() {
@@ -229,26 +232,152 @@ class ContinuousListenService {
     async sendToLLM(includeScreenshot = false) {
         await this.pauseListening();
         
-        const conversationText = this.getConversationText();
-        const screenshot = includeScreenshot ? this.currentScreenshot : null;
-        
-        // Send to ask service
-        const askWindow = BrowserWindow.getAllWindows().find(win => 
-            win.webContents.getURL().includes('ask.html')
-        );
-        
-        if (askWindow) {
-            askWindow.show();
-            askWindow.webContents.send('populate-from-continuous-listen', {
-                text: conversationText,
+        try {
+            const conversationText = this.getConversationText();
+            const screenshot = includeScreenshot ? this.currentScreenshot : null;
+            
+            // Send conversation history to SttView
+            const conversationMessages = this.conversationHistory.map(entry => ({
+                id: Date.now() + Math.random(),
+                speaker: entry.speaker,
+                text: entry.text,
+                isPartial: false,
+                isFinal: true,
+                timestamp: entry.timestamp
+            }));
+            
+            this.sendToRenderer('stt-conversation-update', {
+                messages: conversationMessages,
+                conversationText: conversationText,
                 screenshot: screenshot
+            });
+            
+            // Get API key and provider
+            const apiKey = await getStoredApiKey();
+            if (!apiKey) {
+                throw new Error('No API key found. Please configure your API key in settings.');
+            }
+            
+            const provider = await getStoredProvider();
+            
+            // Build system prompt
+            const systemPrompt = getSystemPrompt('pickle_glass', conversationText, false);
+            
+            // Prepare messages for LLM
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                {
+                    role: 'user',
+                    content: includeScreenshot && screenshot ? [
+                        { type: 'text', text: 'Based on the conversation and current screen, provide helpful analysis or suggestions.' },
+                        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshot.base64}` } }
+                    ] : 'Based on the conversation, provide helpful analysis or suggestions.'
+                }
+            ];
+            
+            // Create streaming LLM instance
+            const streamingLLM = createStreamingLLM(provider, {
+                apiKey: apiKey,
+                model: provider === 'openai' ? 'gpt-4o' : 'gemini-2.0-flash-exp',
+                temperature: 0.7,
+                maxTokens: 2048
+            });
+            
+            // Create a unique message ID for the AI response
+            const aiMessageId = Date.now() + Math.random();
+            let aiResponseText = '';
+            
+            // Add initial AI message placeholder
+            this.sendToRenderer('stt-update', {
+                speaker: 'AI',
+                text: '',
+                isPartial: true,
+                isFinal: false,
+                messageId: aiMessageId
+            });
+            
+            // Stream the response
+            const response = await streamingLLM.streamChat(messages);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.substring(6);
+                        if (data === '[DONE]') {
+                            // Finalize the AI message
+                            this.sendToRenderer('stt-update', {
+                                speaker: 'AI',
+                                text: aiResponseText,
+                                isPartial: false,
+                                isFinal: true,
+                                messageId: aiMessageId
+                            });
+                            
+                            // Add to conversation history
+                            const aiEntry = {
+                                speaker: 'AI',
+                                text: aiResponseText,
+                                timestamp: new Date().toISOString()
+                            };
+                            this.conversationHistory.push(aiEntry);
+                            
+                            // Save to database if we have a session
+                            if (this.currentSessionId) {
+                                try {
+                                    await sttRepository.addTranscript({
+                                        sessionId: this.currentSessionId,
+                                        speaker: 'AI',
+                                        text: aiResponseText.trim(),
+                                    });
+                                } catch (error) {
+                                    console.error('Failed to save AI response to database:', error);
+                                }
+                            }
+                        } else {
+                            try {
+                                const json = JSON.parse(data);
+                                const token = json.choices[0]?.delta?.content || '';
+                                if (token) {
+                                    aiResponseText += token;
+                                    // Update the AI message with streaming text
+                                    this.sendToRenderer('stt-update', {
+                                        speaker: 'AI',
+                                        text: aiResponseText,
+                                        isPartial: true,
+                                        isFinal: false,
+                                        messageId: aiMessageId
+                                    });
+                                }
+                            } catch (error) {
+                                // Ignore parsing errors
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error in sendToLLM:', error);
+            // Send error message to UI
+            this.sendToRenderer('stt-update', {
+                speaker: 'System',
+                text: `Error: ${error.message}`,
+                isPartial: false,
+                isFinal: true
             });
         }
         
         // Resume listening after a delay
         setTimeout(() => {
             this.resumeListening();
-        }, 1000);
+        }, 2000);
     }
 
     setupIpcHandlers() {

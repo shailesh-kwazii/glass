@@ -67,6 +67,26 @@ export class SttView extends LitElement {
             margin-left: auto;
         }
 
+        .stt-message.ai {
+            background: rgba(138, 43, 226, 0.2);
+            color: rgba(255, 255, 255, 0.95);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            margin-right: auto;
+            border: 1px solid rgba(138, 43, 226, 0.4);
+        }
+
+        .stt-message.system {
+            background: rgba(255, 165, 0, 0.2);
+            color: rgba(255, 255, 255, 0.9);
+            align-self: center;
+            text-align: center;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 8px auto;
+            border: 1px solid rgba(255, 165, 0, 0.4);
+        }
+
         .empty-state {
             display: flex;
             align-items: center;
@@ -91,6 +111,7 @@ export class SttView extends LitElement {
         this._shouldScrollAfterUpdate = false;
 
         this.handleSttUpdate = this.handleSttUpdate.bind(this);
+        this.handleConversationUpdate = this.handleConversationUpdate.bind(this);
     }
 
     connectedCallback() {
@@ -98,6 +119,7 @@ export class SttView extends LitElement {
         if (window.require) {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.on('stt-update', this.handleSttUpdate);
+            ipcRenderer.on('stt-conversation-update', this.handleConversationUpdate);
         }
     }
 
@@ -106,6 +128,7 @@ export class SttView extends LitElement {
         if (window.require) {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.removeListener('stt-update', this.handleSttUpdate);
+            ipcRenderer.removeListener('stt-conversation-update', this.handleConversationUpdate);
         }
     }
 
@@ -115,13 +138,33 @@ export class SttView extends LitElement {
         this.requestUpdate();
     }
 
-    handleSttUpdate(event, { speaker, text, isFinal, isPartial }) {
+    handleConversationUpdate(event, { messages, conversationText, screenshot }) {
+        // Replace current messages with conversation history
+        this.sttMessages = messages;
+        this._shouldScrollAfterUpdate = true;
+        
+        // Notify parent component about the update
+        this.dispatchEvent(new CustomEvent('conversation-updated', {
+            detail: { messages, conversationText, screenshot },
+            bubbles: true
+        }));
+    }
+
+    handleSttUpdate(event, { speaker, text, isFinal, isPartial, messageId }) {
         if (text === undefined) return;
 
         const container = this.shadowRoot.querySelector('.transcription-container');
         this._shouldScrollAfterUpdate = container ? container.scrollTop + container.clientHeight >= container.scrollHeight - 10 : false;
 
-        const findLastPartialIdx = spk => {
+        const findMessageIdx = (spk, msgId) => {
+            // If messageId is provided, find by messageId
+            if (msgId !== undefined) {
+                for (let i = this.sttMessages.length - 1; i >= 0; i--) {
+                    const m = this.sttMessages[i];
+                    if (m.messageId === msgId) return i;
+                }
+            }
+            // Otherwise, find last partial message for speaker
             for (let i = this.sttMessages.length - 1; i >= 0; i--) {
                 const m = this.sttMessages[i];
                 if (m.speaker === spk && m.isPartial) return i;
@@ -130,7 +173,7 @@ export class SttView extends LitElement {
         };
 
         const newMessages = [...this.sttMessages];
-        const targetIdx = findLastPartialIdx(speaker);
+        const targetIdx = findMessageIdx(speaker, messageId);
 
         if (isPartial) {
             if (targetIdx !== -1) {
@@ -143,6 +186,7 @@ export class SttView extends LitElement {
             } else {
                 newMessages.push({
                     id: this.messageIdCounter++,
+                    messageId: messageId,
                     speaker,
                     text,
                     isPartial: true,
@@ -160,6 +204,7 @@ export class SttView extends LitElement {
             } else {
                 newMessages.push({
                     id: this.messageIdCounter++,
+                    messageId: messageId,
                     speaker,
                     text,
                     isPartial: false,
@@ -187,7 +232,11 @@ export class SttView extends LitElement {
     }
 
     getSpeakerClass(speaker) {
-        return speaker.toLowerCase() === 'me' ? 'me' : 'them';
+        const speakerLower = speaker.toLowerCase();
+        if (speakerLower === 'me') return 'me';
+        if (speakerLower === 'ai') return 'ai';
+        if (speakerLower === 'system') return 'system';
+        return 'them';
     }
 
     getTranscriptText() {
