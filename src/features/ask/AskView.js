@@ -835,6 +835,10 @@ export class AskView extends LitElement {
             ipcRenderer.on('ask-global-send', this.handleGlobalSendRequest);
             ipcRenderer.on('toggle-text-input', this.handleToggleTextInput);
             ipcRenderer.on('receive-question-from-assistant', this.handleQuestionFromAssistant);
+            ipcRenderer.on('populate-from-continuous-listen', (event, data) => {
+                console.log('📨 Received data from continuous listen:', data);
+                this.handleContinuousListenData(data);
+            });
             ipcRenderer.on('hide-text-input', () => {
                 console.log('📤 Hide text input signal received');
                 this.showTextInput = false;
@@ -1155,6 +1159,45 @@ export class AskView extends LitElement {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.invoke('ask:sendMessage', question).catch(error => {
                 console.error('Error processing assistant question:', error);
+                this.isLoading = false;
+                this.isStreaming = false;
+                this.currentResponse = `Error: ${error.message}`;
+                this.renderContent();
+            });
+        }
+    }
+
+    async handleContinuousListenData(data) {
+        // Clear any existing content
+        this.currentResponse = '';
+        this.isStreaming = false;
+        this.requestUpdate();
+
+        // Show the ask view
+        this.classList.remove('hidden', 'hiding');
+        this.classList.add('showing');
+        
+        // Set up the question with conversation history
+        const conversationContext = "Here is the conversation history:\n\n" + data.text;
+        
+        this.currentQuestion = conversationContext;
+        this.isLoading = true;
+        this.showTextInput = false;
+        this.headerText = 'processing conversation...';
+        this.startHeaderAnimation();
+        this.requestUpdate();
+
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            
+            // Include screenshot if provided
+            const messageData = {
+                text: conversationContext,
+                screenshot: data.screenshot
+            };
+            
+            ipcRenderer.invoke('ask:sendMessageWithScreenshot', messageData).catch(error => {
+                console.error('Error processing continuous listen data:', error);
                 this.isLoading = false;
                 this.isStreaming = false;
                 this.currentResponse = `Error: ${error.message}`;

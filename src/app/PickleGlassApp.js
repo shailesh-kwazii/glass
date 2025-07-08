@@ -2,6 +2,7 @@ import { html, css, LitElement } from '../assets/lit-core-2.7.4.min.js';
 import { SettingsView } from '../features/settings/SettingsView.js';
 import { AssistantView } from '../features/listen/AssistantView.js';
 import { AskView } from '../features/ask/AskView.js';
+import '../features/listen/ContinuousListenIndicator.js';
 
 import '../features/listen/renderer/renderer.js';
 
@@ -86,6 +87,15 @@ export class PickleGlassApp extends LitElement {
                 console.log('Received start-listening-session command, calling handleListenClick.');
                 this.handleListenClick();
             });
+            
+            // Handle continuous listening keyboard shortcuts
+            ipcRenderer.on('send-conversation-to-llm', async (_, data) => {
+                console.log('Send conversation to LLM triggered', data);
+                const result = await ipcRenderer.invoke('send-conversation-to-llm', data);
+                if (!result.success) {
+                    console.error('Failed to send conversation to LLM');
+                }
+            });
         }
     }
 
@@ -96,6 +106,7 @@ export class PickleGlassApp extends LitElement {
             ipcRenderer.removeAllListeners('update-status');
             ipcRenderer.removeAllListeners('click-through-toggled');
             ipcRenderer.removeAllListeners('start-listening-session');
+            ipcRenderer.removeAllListeners('send-conversation-to-llm');
         }
     }
 
@@ -229,32 +240,44 @@ export class PickleGlassApp extends LitElement {
     }
 
     render() {
+        let content;
         switch (this.currentView) {
             case 'listen':
-                return html`<assistant-view
+                content = html`<assistant-view
                     .currentResponseIndex=${this.currentResponseIndex}
                     .selectedProfile=${this.selectedProfile}
                     .onSendText=${message => this.handleSendText(message)}
                     @response-index-changed=${e => (this.currentResponseIndex = e.detail.index)}
                 ></assistant-view>`;
+                break;
             case 'ask':
-                return html`<ask-view></ask-view>`;
+                content = html`<ask-view></ask-view>`;
+                break;
             case 'settings':
-                return html`<settings-view
+                content = html`<settings-view
                     .selectedProfile=${this.selectedProfile}
                     .selectedLanguage=${this.selectedLanguage}
                     .onProfileChange=${profile => (this.selectedProfile = profile)}
                     .onLanguageChange=${lang => (this.selectedLanguage = lang)}
                 ></settings-view>`;
+                break;
             case 'history':
-                return html`<history-view></history-view>`;
+                content = html`<history-view></history-view>`;
+                break;
             case 'help':
-                return html`<help-view></help-view>`;
+                content = html`<help-view></help-view>`;
+                break;
             case 'setup':
-                return html`<setup-view></setup-view>`;
+                content = html`<setup-view></setup-view>`;
+                break;
             default:
-                return html`<div>Unknown view: ${this.currentView}</div>`;
+                content = html`<div>Unknown view: ${this.currentView}</div>`;
         }
+        
+        return html`
+            ${content}
+            <continuous-listen-indicator></continuous-listen-indicator>
+        `;
     }
 }
 

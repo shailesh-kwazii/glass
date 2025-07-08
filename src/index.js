@@ -14,6 +14,7 @@ if (require('electron-squirrel-startup')) {
 const { app, BrowserWindow, shell, ipcMain, dialog, desktopCapturer, session } = require('electron');
 const { createWindows } = require('./electron/windowManager.js');
 const ListenService = require('./features/listen/listenService');
+const ContinuousListenService = require('./features/listen/continuousListenService');
 const databaseInitializer = require('./common/services/databaseInitializer');
 const authService = require('./common/services/authService');
 const path = require('node:path');
@@ -31,6 +32,9 @@ let WEB_PORT = 3000;
 const listenService = new ListenService();
 // Make listenService globally accessible so other modules (e.g., windowManager, askService) can reuse the same instance
 global.listenService = listenService;
+
+const continuousListenService = new ContinuousListenService();
+global.continuousListenService = continuousListenService;
 
 // Native deep link handling - cross-platform compatible
 let pendingDeepLinkUrl = null;
@@ -182,6 +186,7 @@ app.whenReady().then(async () => {
 
         authService.initialize();
         listenService.setupIpcHandlers();
+        continuousListenService.setupIpcHandlers();
         askService.initialize();
         settingsService.initialize();
         setupGeneralIpcHandlers();
@@ -191,6 +196,16 @@ app.whenReady().then(async () => {
         console.log('Web front-end listening on', WEB_PORT);
         
         createWindows();
+        
+        // Start continuous listening after a short delay
+        setTimeout(async () => {
+            try {
+                await continuousListenService.startContinuousListening();
+                console.log('Continuous listening started automatically');
+            } catch (error) {
+                console.error('Failed to start continuous listening:', error);
+            }
+        }, 2000);
 
     } catch (err) {
         console.error('>>> [index.js] Database initialization failed - some features may not work', err);

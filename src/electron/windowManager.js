@@ -1223,6 +1223,8 @@ function getDefaultKeybinds() {
         nextResponse: isMac ? 'Cmd+]' : 'Ctrl+]',
         scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
         scrollDown: isMac ? 'Cmd+Shift+Down' : 'Ctrl+Shift+Down',
+        sendConversation: isMac ? 'Cmd+/' : 'Ctrl+/',
+        sendConversationWithScreenshot: isMac ? 'Cmd+.' : 'Ctrl+.',
     };
 }
 
@@ -1426,6 +1428,34 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, movementMan
             console.log(`Registered scrollDown: ${keybinds.scrollDown}`);
         } catch (error) {
             console.error(`Failed to register scrollDown (${keybinds.scrollDown}):`, error);
+        }
+    }
+
+    // Command + / handler - Send conversation to LLM
+    if (keybinds.sendConversation) {
+        try {
+            globalShortcut.register(keybinds.sendConversation, async () => {
+                console.log('Send conversation shortcut triggered');
+                // Pause audio capture and send conversation to LLM
+                sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
+            });
+            console.log(`Registered sendConversation: ${keybinds.sendConversation}`);
+        } catch (error) {
+            console.error(`Failed to register sendConversation (${keybinds.sendConversation}):`, error);
+        }
+    }
+
+    // Command + . handler - Send conversation with screenshot to LLM
+    if (keybinds.sendConversationWithScreenshot) {
+        try {
+            globalShortcut.register(keybinds.sendConversationWithScreenshot, async () => {
+                console.log('Send conversation with screenshot shortcut triggered');
+                // Pause audio capture and send conversation + screenshot to LLM
+                sendToRenderer('send-conversation-to-llm', { includeScreenshot: true });
+            });
+            console.log(`Registered sendConversationWithScreenshot: ${keybinds.sendConversationWithScreenshot}`);
+        } catch (error) {
+            console.error(`Failed to register sendConversationWithScreenshot (${keybinds.sendConversationWithScreenshot}):`, error);
         }
     }
 }

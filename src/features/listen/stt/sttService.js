@@ -153,7 +153,7 @@ class SttService {
         this.theirCompletionTimer = setTimeout(() => this.flushTheirCompletion(), COMPLETION_DEBOUNCE_MS);
     }
 
-    async initializeSttSessions(language = 'en') {
+    async initializeSttSessions(language = 'en', options = {}) {
         const effectiveLanguage = process.env.OPENAI_TRANSCRIBE_LANG || language || 'en';
         
         const API_KEY = await this.getApiKey();
@@ -269,12 +269,19 @@ class SttService {
             language: effectiveLanguage
         };
 
-        [this.mySttSession, this.theirSttSession] = await Promise.all([
-            createSTT(provider, { ...sttOptions, callbacks: mySttConfig.callbacks }),
-            createSTT(provider, { ...sttOptions, callbacks: theirSttConfig.callbacks }),
-        ]);
-
-        console.log('✅ Both STT sessions initialized successfully.');
+        if (options.systemAudioOnly) {
+            // Only initialize system audio session for continuous listening
+            this.theirSttSession = await createSTT(provider, { ...sttOptions, callbacks: theirSttConfig.callbacks });
+            console.log('✅ System audio STT session initialized successfully.');
+        } else {
+            // Initialize both sessions for normal listening
+            [this.mySttSession, this.theirSttSession] = await Promise.all([
+                createSTT(provider, { ...sttOptions, callbacks: mySttConfig.callbacks }),
+                createSTT(provider, { ...sttOptions, callbacks: theirSttConfig.callbacks }),
+            ]);
+            console.log('✅ Both STT sessions initialized successfully.');
+        }
+        
         return true;
     }
 

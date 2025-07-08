@@ -133,10 +133,99 @@ async function sendMessage(userPrompt) {
     }
 }
 
+async function sendMessageWithScreenshot(data) {
+    const { text, screenshot } = data;
+    
+    if (!text || text.trim().length === 0) {
+        console.warn('[AskService] Cannot process empty message');
+        return { success: false, error: 'Empty message' };
+    }
+    
+    const askWindow = windowPool.get('ask');
+    if (askWindow && !askWindow.isDestroyed()) {
+        askWindow.webContents.send('hide-text-input');
+    }
+
+    try {
+        console.log(`[AskService] 🤖 Processing message with screenshot: ${text.substring(0, 50)}...`);
+
+        // Use provided screenshot or capture new one
+        const screenshotBase64 = screenshot ? screenshot.base64 : null;
+
+        const systemPrompt = getSystemPrompt('pickle_glass_analysis', '', false);
+
+        const API_KEY = await getStoredApiKey();
+        if (!API_KEY) {
+            throw new Error('No API key found');
+        }
+
+        const messages = [
+            { role: 'system', content: systemPrompt },
+            {
+                role: 'user',
+                content: screenshotBase64 
+                    ? [
+                        { type: 'text', text: text },
+                        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } }
+                    ]
+                    : text
+            }
+        ];
+
+        const uid = authService.getCurrentUserId();
+        const sessionId = await sessionRepository.getOrCreateActive(uid, 'ask');
+        
+        await sessionRepository.touch(sessionId);
+        const queryId = await askRepository.addQuery({
+            sessionId,
+            question: text,
+            screenshot: screenshotBase64,
+        });
+
+        const provider = await getStoredProvider();
+        const llm = await createStreamingLLM(provider, {
+            apiKey: API_KEY,
+            onChunk: (chunk) => {
+                if (askWindow && !askWindow.isDestroyed()) {
+                    askWindow.webContents.send('ask:streamResponse', { chunk });
+                }
+            },
+            onComplete: async (fullResponse) => {
+                await askRepository.updateQueryResponse({
+                    queryId,
+                    response: fullResponse,
+                });
+                
+                if (askWindow && !askWindow.isDestroyed()) {
+                    askWindow.webContents.send('ask:responseComplete', { response: fullResponse });
+                }
+            },
+            onError: (error) => {
+                console.error('[AskService] Streaming error:', error);
+                if (askWindow && !askWindow.isDestroyed()) {
+                    askWindow.webContents.send('ask:responseError', { error: error.message });
+                }
+            }
+        });
+
+        await llm.streamChat(messages);
+        return { success: true };
+        
+    } catch (error) {
+        console.error('[AskService] Error processing message with screenshot:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 function initialize() {
     ipcMain.handle('ask:sendMessage', async (event, userPrompt) => {
         return sendMessage(userPrompt);
     });
+    
+    ipcMain.handle('ask:sendMessageWithScreenshot', async (event, data) => {
+        return sendMessageWithScreenshot(data);
+    });
+    
     console.log('[AskService] Initialized and ready.');
 }
 
