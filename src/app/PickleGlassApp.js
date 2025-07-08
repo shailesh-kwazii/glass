@@ -90,21 +90,31 @@ export class PickleGlassApp extends LitElement {
             
             // Handle continuous listening keyboard shortcuts
             ipcRenderer.on('send-conversation-to-llm', async (_, data) => {
-                console.log('Send conversation to LLM triggered', data);
-                const result = await ipcRenderer.invoke('send-conversation-to-llm', data);
-                if (!result.success) {
-                    console.error('Failed to send conversation to LLM');
+                console.log('[PickleGlassApp] IPC EVENT: send-conversation-to-llm', data);
+                try {
+                    const result = await ipcRenderer.invoke('send-conversation-to-llm', data);
+                    console.log('[PickleGlassApp] send-conversation-to-llm result:', result);
+                    if (!result.success) {
+                        console.error('[PickleGlassApp] Failed to send conversation to LLM');
+                    }
+                } catch (error) {
+                    console.error('[PickleGlassApp] Error invoking send-conversation-to-llm:', error);
                 }
             });
             
             // Handle toggle continuous listening
             ipcRenderer.on('toggle-continuous-listening', async () => {
-                console.log('Toggle continuous listening triggered');
-                const result = await ipcRenderer.invoke('toggle-continuous-listening');
-                if (result.success) {
-                    console.log('Continuous listening is now:', result.isListening ? 'ON' : 'OFF');
-                } else {
-                    console.error('Failed to toggle continuous listening');
+                console.log('[PickleGlassApp] IPC EVENT: toggle-continuous-listening');
+                try {
+                    const result = await ipcRenderer.invoke('toggle-continuous-listening');
+                    console.log('[PickleGlassApp] toggle result:', result);
+                    if (result.success) {
+                        console.log('[PickleGlassApp] Continuous listening is now:', result.isListening ? 'ON' : 'OFF');
+                    } else {
+                        console.error('[PickleGlassApp] Failed to toggle continuous listening');
+                    }
+                } catch (error) {
+                    console.error('[PickleGlassApp] Error invoking toggle-continuous-listening:', error);
                 }
             });
         }

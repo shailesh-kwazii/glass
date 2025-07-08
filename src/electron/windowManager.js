@@ -598,13 +598,46 @@ function loadAndRegisterShortcuts(movementManager) {
     const defaultKeybinds = getDefaultKeybinds();
     const header = windowPool.get('header');
     const sendToRenderer = (channel, ...args) => {
-        windowPool.forEach(win => {
+        console.log(`[sendToRenderer] Sending '${channel}' to ${windowPool.size} windows`);
+        console.log(`[sendToRenderer] Current header state: ${currentHeaderState}`);
+        
+        // If we're not in main state, the feature windows don't exist
+        if (currentHeaderState !== 'main') {
+            console.log(`[sendToRenderer] WARNING: Not in main state, feature windows may not exist`);
+            
+            // For toggle-continuous-listening, we can still handle it directly
+            if (channel === 'toggle-continuous-listening' && global.continuousListenService) {
+                console.log('[sendToRenderer] Handling toggle-continuous-listening directly');
+                global.continuousListenService.toggleContinuousListening().then(isListening => {
+                    console.log('[sendToRenderer] Direct toggle result:', isListening);
+                });
+                return;
+            }
+            
+            // For send-conversation-to-llm, handle directly
+            if (channel === 'send-conversation-to-llm' && global.continuousListenService) {
+                console.log('[sendToRenderer] Handling send-conversation-to-llm directly');
+                const { includeScreenshot } = args[0] || {};
+                global.continuousListenService.sendToLLM(includeScreenshot).then(() => {
+                    console.log('[sendToRenderer] Direct send to LLM completed');
+                });
+                return;
+            }
+        }
+        
+        let sent = 0;
+        windowPool.forEach((win, name) => {
             try {
                 if (win && !win.isDestroyed()) {
                     win.webContents.send(channel, ...args);
+                    sent++;
+                    console.log(`[sendToRenderer] Sent to ${name}`);
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error(`[sendToRenderer] Error sending to ${name}:`, e.message);
+            }
         });
+        console.log(`[sendToRenderer] Successfully sent to ${sent} windows`);
     };
 
 
@@ -793,6 +826,19 @@ function setupIpcHandlers(movementManager) {
                     const keybinds = { ...defaultKeybinds, ...savedKeybinds };
 
                     const sendToRenderer = (channel, ...args) => {
+                        // If we're not in main state and trying to use continuous listening, handle directly
+                        if (currentHeaderState !== 'main') {
+                            if (channel === 'toggle-continuous-listening' && global.continuousListenService) {
+                                global.continuousListenService.toggleContinuousListening();
+                                return;
+                            }
+                            if (channel === 'send-conversation-to-llm' && global.continuousListenService) {
+                                const { includeScreenshot } = args[0] || {};
+                                global.continuousListenService.sendToLLM(includeScreenshot);
+                                return;
+                            }
+                        }
+                        
                         windowPool.forEach(win => {
                             try {
                                 if (win && !win.isDestroyed()) {
@@ -1435,18 +1481,25 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, movementMan
     if (keybinds.sendConversation) {
         try {
             globalShortcut.register(keybinds.sendConversation, async () => {
-                console.log('Cmd+/ shortcut triggered');
+                console.log('=== Cmd+/ shortcut triggered ===');
                 
                 // Check if continuous listening is active
-                const isListening = global.continuousListenService ? global.continuousListenService.getContinuousListeningState() : false;
+                if (!global.continuousListenService) {
+                    console.error('ERROR: global.continuousListenService is not available!');
+                    return;
+                }
+                
+                const isListening = global.continuousListenService.getContinuousListeningState();
+                console.log('Current listening state:', isListening);
+                console.log('Window pool size:', windowPool.size);
                 
                 if (isListening) {
                     // If listening is ON, toggle it OFF
-                    console.log('Listening is ON, toggling OFF');
+                    console.log('ACTION: Stopping continuous listening');
                     sendToRenderer('toggle-continuous-listening');
                 } else {
                     // If listening is OFF, send conversation to LLM
-                    console.log('Listening is OFF, sending conversation to LLM');
+                    console.log('ACTION: Sending conversation to LLM');
                     sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
                 }
             });

@@ -155,7 +155,11 @@ class ContinuousListenService {
     }
 
     async stopContinuousListening() {
-        if (!this.isListening) return;
+        console.log('[stopContinuousListening] Called, current state:', this.isListening);
+        if (!this.isListening) {
+            console.log('[stopContinuousListening] Already not listening, returning');
+            return;
+        }
         
         try {
             // Stop audio capture
@@ -178,23 +182,32 @@ class ContinuousListenService {
             this.isPaused = false;
             this.currentSessionId = null;
             
+            console.log('[stopContinuousListening] State updated - isListening:', this.isListening);
+            
             this.sendToRenderer('continuous-listen-state', { 
                 isListening: false, 
                 isPaused: false 
             });
             
-            console.log('Continuous listening stopped');
+            console.log('[stopContinuousListening] Successfully stopped');
         } catch (error) {
             console.error('Error stopping continuous listening:', error);
         }
     }
 
     async toggleContinuousListening() {
+        console.log('[toggleContinuousListening] Called, current state:', this.isListening);
         if (this.isListening) {
+            console.log('[toggleContinuousListening] Stopping...');
             await this.stopContinuousListening();
+            const newState = this.isListening;
+            console.log('[toggleContinuousListening] After stop, state:', newState);
             return false;
         } else {
+            console.log('[toggleContinuousListening] Starting...');
             await this.startContinuousListening();
+            const newState = this.isListening;
+            console.log('[toggleContinuousListening] After start, state:', newState);
             return true;
         }
     }
@@ -414,7 +427,9 @@ class ContinuousListenService {
         });
 
         ipcMain.handle('toggle-continuous-listening', async () => {
+            console.log('[IPC] toggle-continuous-listening handler called');
             const isNowListening = await this.toggleContinuousListening();
+            console.log('[IPC] Returning isListening:', isNowListening);
             return { success: true, isListening: isNowListening };
         });
 
@@ -423,6 +438,7 @@ class ContinuousListenService {
         });
 
         ipcMain.handle('send-conversation-to-llm', async (event, { includeScreenshot }) => {
+            console.log('[IPC] send-conversation-to-llm handler called, includeScreenshot:', includeScreenshot);
             await this.sendToLLM(includeScreenshot);
             return { success: true };
         });
