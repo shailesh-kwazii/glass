@@ -71,12 +71,18 @@ class ContinuousListenService {
     }
 
     async handleTranscriptionComplete(speaker, text) {
-        if (this.isPaused) return;
+        console.log('[ContinuousListenService] handleTranscriptionComplete called:', { speaker, text });
+        console.log('[ContinuousListenService] Current state:', { isPaused: this.isPaused, isProcessingLLM: this.isProcessingLLM });
+        
+        if (this.isPaused) {
+            console.log('[ContinuousListenService] SKIPPING - service is paused');
+            return;
+        }
         
         const timestamp = new Date().toISOString();
         const entry = { speaker, text, timestamp };
         
-        // Add to pending transcriptions buffer instead of sending immediately
+        // Add to pending transcriptions buffer
         this.pendingTranscriptions.push(entry);
         
         // Add to conversation history with rolling buffer
@@ -99,7 +105,16 @@ class ContinuousListenService {
             }
         }
         
-        // Don't send to renderer immediately - wait for cmd+/
+        // Send to renderer immediately during active listening
+        // This ensures real-time display of transcriptions
+        console.log('[ContinuousListenService] Sending stt-update to renderer');
+        this.sendToRenderer('stt-update', {
+            speaker: speaker,
+            text: text,
+            isPartial: false,
+            isFinal: true,
+            timestamp: timestamp
+        });
         // Update transcription count for the indicator
         this.sendToRenderer('continuous-transcription-buffered', { 
             count: this.pendingTranscriptions.length 
@@ -121,7 +136,8 @@ class ContinuousListenService {
                 // Still update state so UI reflects the attempt
                 this.sendToRenderer('continuous-listen-state', { 
                     isListening: false, 
-                    isPaused: false 
+                    isPaused: false,
+                    isProcessing: this.isProcessingLLM 
                 });
                 return false;
             }
@@ -138,7 +154,8 @@ class ContinuousListenService {
                 });
                 this.sendToRenderer('continuous-listen-state', { 
                     isListening: false, 
-                    isPaused: false 
+                    isPaused: false,
+                    isProcessing: this.isProcessingLLM 
                 });
                 return false;
             }
@@ -154,7 +171,8 @@ class ContinuousListenService {
                 });
                 this.sendToRenderer('continuous-listen-state', { 
                     isListening: false, 
-                    isPaused: false 
+                    isPaused: false,
+                    isProcessing: this.isProcessingLLM 
                 });
                 return false;
             }
@@ -185,7 +203,8 @@ class ContinuousListenService {
             
             this.sendToRenderer('continuous-listen-state', { 
                 isListening: true, 
-                isPaused: false 
+                isPaused: false,
+                isProcessing: this.isProcessingLLM 
             });
             
             // Also send session state for MainHeader
@@ -200,7 +219,8 @@ class ContinuousListenService {
             console.error('Failed to start continuous listening:', error);
             this.sendToRenderer('continuous-listen-state', { 
                 isListening: false, 
-                isPaused: false 
+                isPaused: false,
+                isProcessing: this.isProcessingLLM 
             });
             return false;
         }
@@ -238,22 +258,62 @@ class ContinuousListenService {
         
         this.sendToRenderer('continuous-listen-state', { 
             isListening: this.isListening, 
-            isPaused: true 
+            isPaused: true,
+            isProcessing: this.isProcessingLLM 
         });
     }
 
     async resumeListening() {
+        console.log('[ContinuousListenService] 🚀 RESUME LISTENING CALLED');
+        console.log('[ContinuousListenService] Current state:', { isListening: this.isListening, isPaused: this.isPaused, isProcessingLLM: this.isProcessingLLM });
+        console.log('[ContinuousListenService] STT Service exists:', !!this.sttService);
+        console.log('[ContinuousListenService] Current session ID:', this.currentSessionId);
+        
+        // AGGRESSIVE FIX: Ensure feature windows exist
+        const { ensureFeatureWindowsExist } = require('../../electron/windowManager');
+        console.log('[ContinuousListenService] FORCING feature windows to exist...');
+        ensureFeatureWindowsExist();
+        
+        // Give windows time to initialize
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // First, broadcast the state update to ensure UI is ready
+        console.log('[ContinuousListenService] Broadcasting state update BEFORE audio resume');
+        this.sendToRenderer('continuous-listen-state', { 
+            isListening: this.isListening, 
+            isPaused: false,
+            isProcessing: this.isProcessingLLM 
+        });
+        
+        // Then update internal state
         this.isPaused = false;
+        
+        // Add a small delay to ensure UI has processed the state update
+        console.log('[ContinuousListenService] Waiting 100ms for UI to process state update...');
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         // Resume audio capture
         if (this.sttService) {
+            console.log('[ContinuousListenService] Resuming audio capture via sttService');
             await this.sttService.resumeAudioCapture();
+            console.log('[ContinuousListenService] sttService.resumeAudioCapture() completed');
+            
+            // AGGRESSIVE: Send resume signal multiple times to ensure it's received
+            console.log('[ContinuousListenService] AGGRESSIVE: Sending resume signal again after 200ms');
+            setTimeout(() => {
+                console.log('[ContinuousListenService] Second resume signal...');
+                this.sttService.sendToRenderer('resume-microphone-capture');
+            }, 200);
+            
+            setTimeout(() => {
+                console.log('[ContinuousListenService] Third resume signal...');
+                this.sttService.sendToRenderer('resume-microphone-capture');
+            }, 500);
+        } else {
+            console.error('[ContinuousListenService] ERROR: sttService is null!');
         }
         
-        this.sendToRenderer('continuous-listen-state', { 
-            isListening: this.isListening, 
-            isPaused: false 
-        });
+        console.log('[ContinuousListenService] Resume complete, final state:', { isListening: this.isListening, isPaused: this.isPaused });
     }
 
     async stopContinuousListening() {
@@ -289,7 +349,8 @@ class ContinuousListenService {
             
             this.sendToRenderer('continuous-listen-state', { 
                 isListening: false, 
-                isPaused: false 
+                isPaused: false,
+                isProcessing: this.isProcessingLLM 
             });
             
             // Also send session state for MainHeader
@@ -391,7 +452,7 @@ class ContinuousListenService {
         this.sendToRenderer('continuous-listen-state', { 
             isListening: this.isListening, 
             isPaused: this.isPaused,
-            isProcessing: true 
+            isProcessing: this.isProcessingLLM 
         });
         
         try {
@@ -621,7 +682,7 @@ class ContinuousListenService {
             this.sendToRenderer('continuous-listen-state', { 
                 isListening: this.isListening, 
                 isPaused: this.isPaused,
-                isProcessing: false 
+                isProcessing: this.isProcessingLLM 
             });
         }
     }

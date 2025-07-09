@@ -290,6 +290,12 @@ class SttService {
         const isGemini = provider === 'gemini';
         
         if (!this.mySttSession) {
+            console.error('[SttService] ERROR: mySttSession is NULL when trying to send audio!');
+            console.error('[SttService] Session states:', {
+                mySttSession: !!this.mySttSession,
+                theirSttSession: !!this.theirSttSession,
+                isSessionActive: this.isSessionActive()
+            });
             throw new Error('User STT session not active');
         }
 
@@ -297,7 +303,17 @@ class SttService {
             ? { audio: { data, mimeType: mimeType || 'audio/pcm;rate=24000' } }
             : data;
 
-        await this.mySttSession.sendRealtimeInput(payload);
+        try {
+            await this.mySttSession.sendRealtimeInput(payload);
+            // Log successful audio send occasionally
+            if (Math.random() < 0.01) {
+                console.log('[SttService] Successfully sent audio to mySttSession');
+            }
+        } catch (error) {
+            console.error('[SttService] ERROR sending audio to STT session:', error);
+            console.error('[SttService] This might indicate the session has timed out or closed');
+            throw error;
+        }
     }
 
     async sendSystemAudioContent(data, mimeType) {
@@ -452,14 +468,38 @@ class SttService {
     }
 
     async resumeAudioCapture() {
-        console.log('[SttService] Resuming audio capture...');
+        console.log('[SttService] resumeAudioCapture() called');
+        console.log('[SttService] Session active check:', this.isSessionActive());
+        console.log('[SttService] Sessions:', { 
+            mySttSession: !!this.mySttSession, 
+            theirSttSession: !!this.theirSttSession,
+            systemAudioProc: !!this.systemAudioProc
+        });
+        console.log('[SttService] Platform:', process.platform);
+        
         // Restart system audio capture if sessions are active
         if (this.isSessionActive() && process.platform === 'darwin') {
-            await this.startMacOSAudioCapture();
+            console.log('[SttService] Attempting to start macOS audio capture...');
+            const result = await this.startMacOSAudioCapture();
+            console.log('[SttService] startMacOSAudioCapture result:', result);
+            console.log('[SttService] SystemAudioDump process status:', {
+                exists: !!this.systemAudioProc,
+                pid: this.systemAudioProc?.pid
+            });
+        } else {
+            console.log('[SttService] NOT starting macOS audio capture - sessions inactive or wrong platform');
+            console.log('[SttService] Detailed reason:', {
+                isSessionActive: this.isSessionActive(),
+                isDarwin: process.platform === 'darwin',
+                mySttSession: !!this.mySttSession,
+                theirSttSession: !!this.theirSttSession
+            });
         }
         
         // Send resume signal to renderer for microphone capture
+        console.log('[SttService] Sending resume-microphone-capture signal via sendToRenderer');
         this.sendToRenderer('resume-microphone-capture');
+        console.log('[SttService] resume-microphone-capture signal sent');
     }
 
     isSessionActive() {

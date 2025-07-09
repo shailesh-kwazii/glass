@@ -27,6 +27,27 @@ const MAX_SYSTEM_BUFFER_SIZE = 10;
 let isPaused = false;
 let pausedProcessors = [];
 
+// Debug: Log audio capture state periodically
+setInterval(() => {
+    if (audioProcessor || systemAudioProcessor) {
+        console.log('[listenCapture] Audio capture state check:', {
+            isPaused,
+            hasAudioProcessor: !!audioProcessor,
+            hasSystemProcessor: !!systemAudioProcessor,
+            pausedProcessorsCount: pausedProcessors.length
+        });
+    }
+}, 5000);
+
+// AGGRESSIVE: Global function to force resume from console
+window.forceResumeAudioCapture = () => {
+    console.warn('[listenCapture] FORCE RESUME AUDIO CAPTURE CALLED');
+    isPaused = false;
+    window.listenCaptureForceResume = true;
+    resumeMicrophoneCapture();
+    console.warn('[listenCapture] Force resume complete');
+};
+
 // ---------------------------
 // Utility helpers (exact from renderer.js)
 // ---------------------------
@@ -320,6 +341,11 @@ function setupMicProcessing(micStream) {
     micProcessor.onaudioprocess = async e => {
         const inputData = e.inputBuffer.getChannelData(0);
         audioBuffer.push(...inputData);
+        
+        // Debug: Log that audio callback is being called
+        if (Math.random() < 0.01) { // Log 1% of the time to avoid spam
+            console.log('[listenCapture] MIC audio callback ACTIVE, buffer:', audioBuffer.length, 'isPaused:', isPaused, 'context state:', micAudioContext.state);
+        }
 
         while (audioBuffer.length >= samplesPerChunk) {
             let chunk = audioBuffer.splice(0, samplesPerChunk);
@@ -341,10 +367,24 @@ function setupMicProcessing(micStream) {
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
             if (!isPaused) {
+                // Double-check isPaused before sending
+                if (isPaused) {
+                    console.error('[listenCapture] RACE CONDITION: isPaused changed to true!');
+                    return;
+                }
+                console.log('[listenCapture] Sending MIC audio chunk, size:', base64Data.length);
                 await ipcRenderer.invoke('send-audio-content', {
                     data: base64Data,
                     mimeType: 'audio/pcm;rate=24000',
                 });
+            } else {
+                console.log('[listenCapture] MIC audio BLOCKED - isPaused is true');
+                // AGGRESSIVE: Check if we should be paused
+                if (window.listenCaptureForceResume) {
+                    console.warn('[listenCapture] FORCE RESUME DETECTED - overriding isPaused');
+                    isPaused = false;
+                    window.listenCaptureForceResume = false;
+                }
             }
         }
     };
@@ -376,10 +416,13 @@ function setupLinuxMicProcessing(micStream) {
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
             if (!isPaused) {
+                console.log('[listenCapture] Sending LINUX MIC audio chunk, size:', base64Data.length);
                 await ipcRenderer.invoke('send-audio-content', {
                     data: base64Data,
                     mimeType: 'audio/pcm;rate=24000',
                 });
+            } else {
+                console.log('[listenCapture] LINUX MIC audio BLOCKED - isPaused is true');
             }
         }
     };
@@ -729,45 +772,174 @@ function stopCapture() {
 // Pause/Resume functions
 // ---------------------------
 function pauseMicrophoneCapture() {
-    console.log('[listenCapture] Pausing microphone capture');
+    console.log('[listenCapture] pauseMicrophoneCapture() called');
+    console.log('[listenCapture] Previous isPaused state:', isPaused);
     isPaused = true;
     
     // Disconnect audio processors
     if (audioProcessor) {
+        console.log('[listenCapture] Disconnecting mic audio processor');
         audioProcessor.disconnect();
         pausedProcessors.push({ processor: audioProcessor, type: 'mic' });
     }
     if (systemAudioProcessor) {
+        console.log('[listenCapture] Disconnecting system audio processor');
         systemAudioProcessor.disconnect();
         pausedProcessors.push({ processor: systemAudioProcessor, type: 'system' });
     }
+    console.log('[listenCapture] Pause complete. Paused processors count:', pausedProcessors.length);
 }
 
 function resumeMicrophoneCapture() {
-    console.log('[listenCapture] Resuming microphone capture');
+    console.log('[listenCapture] ========== RESUME MICROPHONE CAPTURE ==========');
+    console.log('[listenCapture] Previous isPaused state:', isPaused);
+    console.log('[listenCapture] Paused processors to reconnect:', pausedProcessors.length);
+    console.log('[listenCapture] Audio contexts:', {
+        audioContext: !!audioContext,
+        audioContextState: audioContext?.state,
+        systemAudioContext: !!systemAudioContext,
+        systemAudioContextState: systemAudioContext?.state
+    });
+    console.log('[listenCapture] Media streams:', {
+        micMediaStream: !!micMediaStream,
+        micStreamActive: micMediaStream?.active,
+        micTracks: micMediaStream?.getTracks()?.map(t => ({ 
+            kind: t.kind,
+            enabled: t.enabled, 
+            muted: t.muted,
+            readyState: t.readyState 
+        }))
+    });
+    
     isPaused = false;
+    console.log('[listenCapture] Set isPaused to false');
+    
+    // Check and resume audio contexts if suspended
+    const contextPromises = [];
+    
+    if (audioContext && audioContext.state === 'suspended') {
+        console.log('[listenCapture] Audio context is SUSPENDED, attempting to resume...');
+        contextPromises.push(
+            audioContext.resume()
+                .then(() => console.log('[listenCapture] Audio context RESUMED successfully'))
+                .catch(err => console.error('[listenCapture] Failed to resume audio context:', err))
+        );
+    } else if (audioContext) {
+        console.log('[listenCapture] Audio context state is:', audioContext.state);
+    }
+    
+    if (systemAudioContext && systemAudioContext.state === 'suspended') {
+        console.log('[listenCapture] System audio context is SUSPENDED, attempting to resume...');
+        contextPromises.push(
+            systemAudioContext.resume()
+                .then(() => console.log('[listenCapture] System audio context RESUMED successfully'))
+                .catch(err => console.error('[listenCapture] Failed to resume system audio context:', err))
+        );
+    } else if (systemAudioContext) {
+        console.log('[listenCapture] System audio context state is:', systemAudioContext.state);
+    }
     
     // Reconnect audio processors
+    console.log('[listenCapture] Reconnecting', pausedProcessors.length, 'audio processors...');
     pausedProcessors.forEach(({ processor, type }) => {
         if (type === 'mic' && audioContext) {
+            console.log('[listenCapture] Reconnecting MIC processor to destination');
             processor.connect(audioContext.destination);
         } else if (type === 'system' && systemAudioContext) {
+            console.log('[listenCapture] Reconnecting SYSTEM processor to destination');
             processor.connect(systemAudioContext.destination);
         }
     });
+    
+    const previousCount = pausedProcessors.length;
     pausedProcessors = [];
+    
+    // Wait for all context resumptions to complete
+    Promise.all(contextPromises).then(() => {
+        console.log('[listenCapture] All audio context resumptions completed');
+        console.log('[listenCapture] Final state: isPaused =', isPaused);
+        
+        // Check if mic stream tracks are still valid
+        if (micMediaStream) {
+            const tracks = micMediaStream.getTracks();
+            const endedTracks = tracks.filter(t => t.readyState === 'ended');
+            if (endedTracks.length > 0) {
+                console.error('[listenCapture] ERROR: Found', endedTracks.length, 'ENDED tracks in mic stream!');
+                console.error('[listenCapture] This means the microphone stream is dead and needs to be restarted');
+                console.error('[listenCapture] User may need to restart capture completely');
+            }
+            
+            const mutedTracks = tracks.filter(t => t.muted);
+            if (mutedTracks.length > 0) {
+                console.warn('[listenCapture] WARNING: Found', mutedTracks.length, 'MUTED tracks in mic stream');
+            }
+        }
+        
+        console.log('[listenCapture] ========== RESUME COMPLETE ==========');
+    });
 }
 
 // ---------------------------
 // IPC Event Listeners
 // ---------------------------
 ipcRenderer.on('pause-microphone-capture', () => {
+    console.log('[listenCapture] ⏸️ IPC EVENT: pause-microphone-capture RECEIVED!');
     pauseMicrophoneCapture();
 });
 
 ipcRenderer.on('resume-microphone-capture', () => {
+    console.log('[listenCapture] ▶️ IPC EVENT: resume-microphone-capture RECEIVED!');
+    console.log('[listenCapture] CRITICAL: About to call resumeMicrophoneCapture()');
     resumeMicrophoneCapture();
+    
+    // AGGRESSIVE FIX: Force check isPaused after a delay
+    setTimeout(() => {
+        console.log('[listenCapture] POST-RESUME CHECK: isPaused =', isPaused);
+        if (isPaused) {
+            console.error('[listenCapture] 🚨 ERROR: isPaused is STILL TRUE after resume!');
+            console.error('[listenCapture] 🚨 FORCING isPaused = false');
+            isPaused = false;
+        }
+    }, 100);
 });
+
+console.log('[listenCapture] IPC event listeners registered for pause/resume');
+
+// AGGRESSIVE DEBUG: Log isPaused state more frequently
+let lastAudioSentTime = Date.now();
+let audioStuckCounter = 0;
+
+setInterval(() => {
+    console.log('[listenCapture] PERIODIC CHECK: isPaused =', isPaused, 'audioProcessor =', !!audioProcessor);
+    
+    // FAILSAFE: Detect if audio is stuck
+    if (!isPaused && audioProcessor && micMediaStream?.active) {
+        const timeSinceLastAudio = Date.now() - lastAudioSentTime;
+        if (timeSinceLastAudio > 10000) { // No audio sent for 10 seconds
+            audioStuckCounter++;
+            console.error('[listenCapture] ⚠️ AUDIO STUCK DETECTED! No audio sent for', Math.round(timeSinceLastAudio/1000), 'seconds');
+            console.error('[listenCapture] Stuck counter:', audioStuckCounter);
+            
+            if (audioStuckCounter >= 2) { // If stuck for 2 checks (4 seconds)
+                console.error('[listenCapture] 🚨 FORCING AUDIO RESTART!');
+                audioStuckCounter = 0;
+                // Force restart
+                window.forceResumeAudioCapture();
+            }
+        } else {
+            audioStuckCounter = 0;
+        }
+    }
+}, 2000);
+
+// Track when audio is actually sent
+const originalInvoke = ipcRenderer.invoke;
+ipcRenderer.invoke = function(...args) {
+    if (args[0] === 'send-audio-content') {
+        lastAudioSentTime = Date.now();
+    }
+    return originalInvoke.apply(this, args);
+};
 
 // ---------------------------
 // Exports & global registration

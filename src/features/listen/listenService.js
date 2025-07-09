@@ -192,10 +192,15 @@ class ListenService {
 
         ipcMain.handle('send-audio-content', async (event, { data, mimeType }) => {
             try {
+                // Debug: Log audio receipt
+                if (Math.random() < 0.02) { // Log 2% of the time
+                    console.log('[ListenService] IPC received audio from renderer, size:', data?.length || 0);
+                }
                 await this.sendAudioContent(data, mimeType);
                 return { success: true };
             } catch (error) {
-                console.error('Error sending user audio:', error);
+                console.error('[ListenService] Error sending user audio:', error);
+                console.error('[ListenService] Audio data size:', data?.length || 0);
                 return { success: false, error: error.message };
             }
         });

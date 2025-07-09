@@ -547,19 +547,7 @@ function createWindows() {
         }
     });
 
-    ipcMain.handle('pause-listening', async () => {
-        if (global.continuousListenService) {
-            await global.continuousListenService.pauseListening();
-            console.log('[WindowManager] Paused continuous listening');
-        }
-    });
-
-    ipcMain.handle('resume-listening', async () => {
-        if (global.continuousListenService) {
-            await global.continuousListenService.resumeListening();
-            console.log('[WindowManager] Resumed continuous listening');
-        }
-    });
+    // Note: pause-listening and resume-listening handlers are registered in continuousListenService.js
 
     ipcMain.handle('send-question-to-ask', (event, question) => {
         const askWindow = windowPool.get('ask');
@@ -633,6 +621,12 @@ function loadAndRegisterShortcuts(movementManager) {
             }
         });
         console.log(`[sendToRenderer] Successfully sent to ${sent} windows`);
+        
+        // Critical debug: Log if no windows received the message
+        if (sent === 0 && channel !== 'toggle-continuous-listening' && channel !== 'send-conversation-to-llm') {
+            console.error(`[sendToRenderer] WARNING: No windows received '${channel}' message!`);
+            console.error(`[sendToRenderer] This may cause audio capture issues`);
+        }
     };
 
 
@@ -1639,6 +1633,27 @@ function registerEarlyIpcHandlers() {
     });
 }
 
+function ensureFeatureWindowsExist() {
+    console.log('[WindowManager] ensureFeatureWindowsExist called');
+    const header = windowPool.get('header');
+    
+    // Check if feature windows already exist
+    const content = windowPool.get('content');
+    const listen = windowPool.get('listen');
+    
+    if (!content || content.isDestroyed() || !listen || listen.isDestroyed()) {
+        console.log('[WindowManager] Feature windows missing, creating them now...');
+        if (header && !header.isDestroyed()) {
+            createFeatureWindows(header);
+            console.log('[WindowManager] Feature windows created');
+        } else {
+            console.error('[WindowManager] Cannot create feature windows - header is missing!');
+        }
+    } else {
+        console.log('[WindowManager] Feature windows already exist');
+    }
+}
+
 module.exports = {
     createWindows,
     windowPool,
@@ -1649,4 +1664,5 @@ module.exports = {
     captureScreenshot,
     registerEarlyIpcHandlers,
     updateLayout,
+    ensureFeatureWindowsExist,
 };

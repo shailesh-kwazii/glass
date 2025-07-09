@@ -110,6 +110,11 @@ export class SttView extends LitElement {
         this.messageIdCounter = 0;
         this._shouldScrollAfterUpdate = false;
         this._wasPaused = false;
+        
+        // State tracking to prevent text display during pause/processing
+        this._isPaused = false;
+        this._isProcessing = false;
+        this._pendingMessages = [];
 
         this.handleSttUpdate = this.handleSttUpdate.bind(this);
         this.handleConversationUpdate = this.handleConversationUpdate.bind(this);
@@ -142,31 +147,67 @@ export class SttView extends LitElement {
         this.requestUpdate();
     }
     
-    handleListenStateChange(event, { isListening, isPaused }) {
+    handleListenStateChange(event, { isListening, isPaused, isProcessing }) {
+        console.log('[SttView] handleListenStateChange EVENT RECEIVED');
+        console.log('[SttView] Incoming state:', { isListening, isPaused, isProcessing });
+        console.log('[SttView] Previous state:', { _isPaused: this._isPaused, _isProcessing: this._isProcessing, _wasPaused: this._wasPaused });
+        console.log('[SttView] Current messages count:', this.sttMessages.length);
+        
+        // Update internal state tracking
+        this._isPaused = isPaused;
+        this._isProcessing = isProcessing || false;
+        
         // Clear messages when resuming from pause (going from paused to not paused while listening)
         if (isListening && !isPaused && this._wasPaused) {
+            console.log('[SttView] RESUMING FROM PAUSE - clearing transcript');
+            console.log('[SttView] Messages before clear:', this.sttMessages.length);
             // Resuming from pause - clear the transcript
             this.resetTranscript();
+            // Clear any pending messages
+            const pendingCount = this._pendingMessages.length;
+            this._pendingMessages = [];
+            console.log('[SttView] Cleared', pendingCount, 'pending messages');
+            console.log('[SttView] Messages after clear:', this.sttMessages.length);
         }
         
         // Update the pause state tracker
         this._wasPaused = isPaused;
+        console.log('[SttView] State update complete:', { _isPaused: this._isPaused, _isProcessing: this._isProcessing, _wasPaused: this._wasPaused });
+        this.requestUpdate();
     }
 
     handleConversationUpdate(event, { messages, conversationText, screenshot }) {
-        // Replace current messages with conversation history
-        this.sttMessages = messages;
-        this._shouldScrollAfterUpdate = true;
+        // Block updates during pause/processing unless it's an AI response
+        const hasAIMessage = messages && messages.some(msg => msg.speaker?.toLowerCase() === 'ai');
         
-        // Notify parent component about the update
-        this.dispatchEvent(new CustomEvent('conversation-updated', {
-            detail: { messages, conversationText, screenshot },
-            bubbles: true
-        }));
+        if (!this._isPaused && !this._isProcessing || hasAIMessage) {
+            // Replace current messages with conversation history
+            this.sttMessages = messages;
+            this._shouldScrollAfterUpdate = true;
+            
+            // Notify parent component about the update
+            this.dispatchEvent(new CustomEvent('conversation-updated', {
+                detail: { messages, conversationText, screenshot },
+                bubbles: true
+            }));
+        }
     }
 
     handleSttUpdate(event, { speaker, text, isFinal, isPartial, messageId }) {
+        console.log('[SttView] handleSttUpdate received:', { speaker, text, isFinal, isPartial, messageId });
+        console.log('[SttView] Current state:', { _isPaused: this._isPaused, _isProcessing: this._isProcessing });
+        
         if (text === undefined) return;
+        
+        // CRITICAL: Block ALL non-AI updates during pause or processing
+        if ((this._isPaused || this._isProcessing) && speaker?.toLowerCase() !== 'ai') {
+            console.log('[SttView] BLOCKING update - paused or processing');
+            // Store message for later if needed, but don't display
+            this._pendingMessages.push({ speaker, text, isFinal, isPartial, messageId });
+            return;
+        }
+        
+        console.log('[SttView] ALLOWING update to proceed');
 
         const container = this.shadowRoot.querySelector('.transcription-container');
         this._shouldScrollAfterUpdate = container ? container.scrollTop + container.clientHeight >= container.scrollHeight - 10 : false;
@@ -270,15 +311,25 @@ export class SttView extends LitElement {
     }
 
     render() {
+        console.log('[SttView] render() called, isVisible:', this.isVisible, 'isPaused:', this._isPaused, 'messages:', this.sttMessages.length);
+        
         if (!this.isVisible) {
+            console.warn('[SttView] Not visible, returning hidden div');
             return html`<div style="display: none;"></div>`;
         }
 
+        // Additional UI-level guard: Don't show non-AI messages during pause/processing
+        const displayMessages = (this._isPaused || this._isProcessing) 
+            ? this.sttMessages.filter(msg => msg.speaker?.toLowerCase() === 'ai')
+            : this.sttMessages;
+            
+        console.log('[SttView] Displaying', displayMessages.length, 'messages out of', this.sttMessages.length, 'total');
+
         return html`
             <div class="transcription-container">
-                ${this.sttMessages.length === 0
-                    ? html`<div class="empty-state">Waiting for speech...</div>`
-                    : this.sttMessages.map(msg => html`
+                ${displayMessages.length === 0
+                    ? html`<div class="empty-state">${this._isPaused ? 'Paused' : this._isProcessing ? 'Processing...' : 'Waiting for speech...'}</div>`
+                    : displayMessages.map(msg => html`
                         <div class="stt-message ${this.getSpeakerClass(msg.speaker)}">
                             ${msg.text}
                         </div>
