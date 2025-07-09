@@ -25,23 +25,27 @@ class ContinuousListenService {
     }
     
     showListenWindow() {
-        const listenWindow = BrowserWindow.getAllWindows().find(win => 
-            win.webContents.getURL().includes('view=listen')
-        );
+        const { windowPool } = require('../../electron/windowManager');
+        const listenWindow = windowPool.get('listen');
+        
         if (listenWindow && !listenWindow.isDestroyed()) {
+            console.log('[ContinuousListenService] Showing listen window');
             listenWindow.show();
             // Force layout update after showing
             const windowManager = require('../../electron/windowManager');
             if (windowManager && typeof windowManager.updateLayout === 'function') {
                 windowManager.updateLayout();
             }
+        } else {
+            console.log('[ContinuousListenService] Listen window not available - header may not be in main state');
+            // Still update UI state even if window doesn't exist
         }
     }
     
     hideListenWindow() {
-        const listenWindow = BrowserWindow.getAllWindows().find(win => 
-            win.webContents.getURL().includes('view=listen')
-        );
+        const { windowPool } = require('../../electron/windowManager');
+        const listenWindow = windowPool.get('listen');
+        
         if (listenWindow && !listenWindow.isDestroyed()) {
             listenWindow.hide();
         }
@@ -109,24 +113,50 @@ class ContinuousListenService {
             // Initialize session
             const uid = authService.getCurrentUserId();
             if (!uid) {
+                console.error('[ContinuousListenService] Cannot start listening: user not logged in');
                 this.sendToRenderer('continuous-listen-error', {
-                    error: 'User not logged in',
+                    error: 'Please log in to use continuous listening',
                     type: 'auth'
                 });
-                throw new Error("Cannot start listening: user not logged in");
+                // Still update state so UI reflects the attempt
+                this.sendToRenderer('continuous-listen-state', { 
+                    isListening: false, 
+                    isPaused: false 
+                });
+                return false;
             }
             
             this.currentSessionId = await sessionRepository.getOrCreateActive(uid, 'continuous-listen');
+            
+            // Check API key before initializing STT
+            const apiKey = await getStoredApiKey();
+            if (!apiKey) {
+                console.error('[ContinuousListenService] No API key found');
+                this.sendToRenderer('continuous-listen-error', {
+                    error: 'Please configure your API key in settings',
+                    type: 'api_key'
+                });
+                this.sendToRenderer('continuous-listen-state', { 
+                    isListening: false, 
+                    isPaused: false 
+                });
+                return false;
+            }
             
             // Initialize STT for system audio only
             try {
                 await this.sttService.initializeSttSessions('en', { systemAudioOnly: true });
             } catch (sttError) {
+                console.error('[ContinuousListenService] STT initialization failed:', sttError);
                 this.sendToRenderer('continuous-listen-error', {
                     error: 'Failed to initialize speech-to-text service. Please check your API key.',
                     type: 'stt_init'
                 });
-                throw sttError;
+                this.sendToRenderer('continuous-listen-state', { 
+                    isListening: false, 
+                    isPaused: false 
+                });
+                return false;
             }
             
             // Start system audio capture
@@ -157,6 +187,9 @@ class ContinuousListenService {
                 isListening: true, 
                 isPaused: false 
             });
+            
+            // Also send session state for MainHeader
+            this.sendToRenderer('session-state-changed', { isActive: true });
             
             // Show the listen window when continuous listening starts
             this.showListenWindow();
@@ -258,6 +291,9 @@ class ContinuousListenService {
                 isListening: false, 
                 isPaused: false 
             });
+            
+            // Also send session state for MainHeader
+            this.sendToRenderer('session-state-changed', { isActive: false });
             
             // Hide the listen window when continuous listening stops
             this.hideListenWindow();
@@ -541,10 +577,8 @@ class ContinuousListenService {
             // Clear abort controller
             this.currentAbortController = null;
             
-            // Resume listening after sending to LLM (only if not aborted)
-            if (this.isListening && this.isPaused && !this.currentAbortController?.signal.aborted) {
-                await this.resumeListening();
-            }
+            // Don't auto-resume after LLM response - keep in paused state
+            // User must explicitly resume with cmd+/ or button click
         } catch (error) {
             console.error('Error in sendToLLM:', error);
             
@@ -578,10 +612,8 @@ class ContinuousListenService {
                 isFinal: true
             });
             
-            // Resume listening even after error (unless aborted)
-            if (this.isListening && this.isPaused && error.name !== 'AbortError') {
-                await this.resumeListening();
-            }
+            // Don't auto-resume after error - keep in paused state
+            // User must explicitly resume with cmd+/ or button click
         } finally {
             // Always reset processing flag and update state
             this.isProcessingLLM = false;
@@ -623,6 +655,18 @@ class ContinuousListenService {
 
         ipcMain.handle('get-continuous-listening-state', () => {
             return { isListening: this.getContinuousListeningState() };
+        });
+
+        ipcMain.handle('pause-listening', async () => {
+            console.log('[IPC] pause-listening handler called');
+            await this.pauseListening();
+            return { success: true };
+        });
+
+        ipcMain.handle('resume-listening', async () => {
+            console.log('[IPC] resume-listening handler called');
+            await this.resumeListening();
+            return { success: true };
         });
 
         console.log('Continuous listen service IPC handlers registered');

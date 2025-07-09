@@ -200,15 +200,8 @@ app.whenReady().then(async () => {
         
         createWindows();
         
-        // Start continuous listening after a short delay
-        setTimeout(async () => {
-            try {
-                await continuousListenService.startContinuousListening();
-                console.log('Continuous listening started automatically');
-            } catch (error) {
-                console.error('Failed to start continuous listening:', error);
-            }
-        }, 2000);
+        // Don't start continuous listening automatically - wait for user to be ready
+        // It will start when the user clicks the Listen button or uses cmd+/
 
     } catch (err) {
         console.error('>>> [index.js] Database initialization failed - some features may not work', err);

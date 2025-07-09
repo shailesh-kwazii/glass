@@ -122,6 +122,13 @@ function createFeatureWindows(header) {
 
 
     windowPool.set('listen', listen);
+    
+    // If continuous listening is already active, show the window
+    if (global.continuousListenService && global.continuousListenService.getContinuousListeningState()) {
+        console.log('[WindowManager] Continuous listening is active, showing listen window');
+        listen.show();
+        updateLayout();
+    }
 
     // ask
     const ask = new BrowserWindow({ ...commonChildOptions, width:600 });
@@ -1500,12 +1507,12 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, movementMan
                         console.log('ACTION: Entering pause mode and sending to LLM');
                         await global.continuousListenService.pauseListening();
                         // Send conversation to LLM when entering pause mode
-                        sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
+                        await global.continuousListenService.sendToLLM(false);
                     }
                 } else {
                     // If listening is OFF, start continuous listening
                     console.log('ACTION: Starting continuous listening');
-                    sendToRenderer('toggle-continuous-listening');
+                    await global.continuousListenService.startContinuousListening();
                 }
             });
             console.log(`Registered Cmd+/ handler: ${keybinds.sendConversation}`);

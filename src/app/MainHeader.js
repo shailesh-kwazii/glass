@@ -371,6 +371,7 @@ export class MainHeader extends LitElement {
         this.isSessionActive = false;
         this.isPaused = false;
         this.isProcessing = false;
+        this.isListening = false;
         this.animationEndTimer = null;
         this.handleMouseMove = this.handleMouseMove.bind(this);
         this.handleMouseUp = this.handleMouseUp.bind(this);
@@ -519,15 +520,38 @@ export class MainHeader extends LitElement {
                 this.isSessionActive = isActive;
             };
             this._listenStateListener = (event, { isListening, isPaused, isProcessing }) => {
+                console.log('[MainHeader] Listen state update:', { isListening, isPaused, isProcessing });
                 // Update session active state based on isListening
                 this.isSessionActive = isListening || false;
+                this.isListening = isListening || false;
                 if (isListening) {
                     this.isPaused = isPaused || false;
                     this.isProcessing = isProcessing || false;
                 }
+                this.requestUpdate();
             };
             ipcRenderer.on('session-state-changed', this._sessionStateListener);
             ipcRenderer.on('continuous-listen-state', this._listenStateListener);
+            
+            // Handle continuous listen errors
+            this._errorListener = (event, { error, type }) => {
+                console.error('[MainHeader] Continuous listen error:', type, error);
+                // Reset button state on error
+                this.isSessionActive = false;
+                this.isListening = false;
+                this.isPaused = false;
+                this.isProcessing = false;
+                this.requestUpdate();
+            };
+            ipcRenderer.on('continuous-listen-error', this._errorListener);
+            
+            // Request initial state
+            ipcRenderer.invoke('get-continuous-listening-state').then(({ isListening }) => {
+                console.log('[MainHeader] Initial continuous listening state:', isListening);
+                this._listenStateListener(null, { isListening, isPaused: false, isProcessing: false });
+            }).catch(error => {
+                console.error('[MainHeader] Failed to get initial state:', error);
+            });
         }
     }
 
@@ -548,15 +572,25 @@ export class MainHeader extends LitElement {
             if (this._listenStateListener) {
                 ipcRenderer.removeListener('continuous-listen-state', this._listenStateListener);
             }
+            if (this._errorListener) {
+                ipcRenderer.removeListener('continuous-listen-error', this._errorListener);
+            }
         }
     }
 
-    invoke(channel, ...args) {
+    async invoke(channel, ...args) {
         if (this.wasJustDragged) {
             return;
         }
         if (window.require) {
-            window.require('electron').ipcRenderer.invoke(channel, ...args);
+            const { ipcRenderer } = window.require('electron');
+            try {
+                const result = await ipcRenderer.invoke(channel, ...args);
+                return result;
+            } catch (error) {
+                console.error(`[MainHeader] Error invoking ${channel}:`, error);
+                throw error;
+            }
         }
     }
 
@@ -603,15 +637,15 @@ export class MainHeader extends LitElement {
                 <button 
                     class="listen-button ${this.isSessionActive ? 'active' : ''} ${this.isProcessing ? 'processing' : ''}"
                     ?disabled=${this.isProcessing}
-                    @click=${() => {
+                    @click=${async () => {
+                        console.log('[MainHeader] Listen button clicked, state:', { isSessionActive: this.isSessionActive, isPaused: this.isPaused });
                         if (!this.isSessionActive) {
-                            this.invoke('toggle-continuous-listening');
+                            await this.invoke('toggle-continuous-listening');
                         } else if (this.isPaused) {
-                            this.invoke('resume-listening');
+                            await this.invoke('resume-listening');
                         } else {
-                            // Enter pause mode and send to LLM
-                            this.invoke('pause-listening');
-                            this.invoke('send-conversation-to-llm', { includeScreenshot: false });
+                            // Just pause - don't send to LLM (only cmd+/ should do that)
+                            await this.invoke('pause-listening');
                         }
                     }}
                     @contextmenu=${(e) => {
