@@ -12,7 +12,7 @@ if (require('electron-squirrel-startup')) {
 }
 
 const { app, BrowserWindow, shell, ipcMain, dialog, desktopCapturer, session } = require('electron');
-const { createWindows } = require('./electron/windowManager.js');
+const { createWindows, registerEarlyIpcHandlers } = require('./electron/windowManager.js');
 const ListenService = require('./features/listen/listenService');
 const ContinuousListenService = require('./features/listen/continuousListenService');
 const databaseInitializer = require('./common/services/databaseInitializer');
@@ -190,6 +190,9 @@ app.whenReady().then(async () => {
         askService.initialize();
         settingsService.initialize();
         setupGeneralIpcHandlers();
+        
+        // Register critical IPC handlers early to avoid race conditions
+        registerEarlyIpcHandlers();
 
         // Start web server and create windows ONLY after all initializations are successful
         WEB_PORT = await startWebStack();

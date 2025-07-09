@@ -16,7 +16,7 @@ export class SttView extends LitElement {
             flex-direction: column;
             gap: 8px;
             min-height: 150px;
-            max-height: 600px;
+            max-height: 80vh;
             position: relative;
             z-index: 1;
             flex: 1;
@@ -46,7 +46,7 @@ export class SttView extends LitElement {
             word-wrap: break-word;
             word-break: break-word;
             line-height: 1.5;
-            font-size: 13px;
+            font-size: 15px;
             margin-bottom: 4px;
             box-sizing: border-box;
         }
@@ -82,7 +82,7 @@ export class SttView extends LitElement {
             align-self: center;
             text-align: center;
             border-radius: 12px;
-            font-size: 12px;
+            font-size: 14px;
             margin: 8px auto;
             border: 1px solid rgba(255, 165, 0, 0.4);
         }
@@ -93,7 +93,7 @@ export class SttView extends LitElement {
             justify-content: center;
             height: 100px;
             color: rgba(255, 255, 255, 0.6);
-            font-size: 12px;
+            font-size: 14px;
             font-style: italic;
         }
     `;
@@ -109,9 +109,11 @@ export class SttView extends LitElement {
         this.isVisible = true;
         this.messageIdCounter = 0;
         this._shouldScrollAfterUpdate = false;
+        this._wasPaused = false;
 
         this.handleSttUpdate = this.handleSttUpdate.bind(this);
         this.handleConversationUpdate = this.handleConversationUpdate.bind(this);
+        this.handleListenStateChange = this.handleListenStateChange.bind(this);
     }
 
     connectedCallback() {
@@ -120,6 +122,7 @@ export class SttView extends LitElement {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.on('stt-update', this.handleSttUpdate);
             ipcRenderer.on('stt-conversation-update', this.handleConversationUpdate);
+            ipcRenderer.on('continuous-listen-state', this.handleListenStateChange);
         }
     }
 
@@ -129,6 +132,7 @@ export class SttView extends LitElement {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.removeListener('stt-update', this.handleSttUpdate);
             ipcRenderer.removeListener('stt-conversation-update', this.handleConversationUpdate);
+            ipcRenderer.removeListener('continuous-listen-state', this.handleListenStateChange);
         }
     }
 
@@ -136,6 +140,17 @@ export class SttView extends LitElement {
     resetTranscript() {
         this.sttMessages = [];
         this.requestUpdate();
+    }
+    
+    handleListenStateChange(event, { isListening, isPaused }) {
+        // Clear messages when resuming from pause (going from paused to not paused while listening)
+        if (isListening && !isPaused && this._wasPaused) {
+            // Resuming from pause - clear the transcript
+            this.resetTranscript();
+        }
+        
+        // Update the pause state tracker
+        this._wasPaused = isPaused;
     }
 
     handleConversationUpdate(event, { messages, conversationText, screenshot }) {

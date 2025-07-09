@@ -2,7 +2,6 @@ import { html, css, LitElement } from '../assets/lit-core-2.7.4.min.js';
 import { SettingsView } from '../features/settings/SettingsView.js';
 import { AssistantView } from '../features/listen/AssistantView.js';
 import { AskView } from '../features/ask/AskView.js';
-import '../features/listen/ContinuousListenIndicator.js';
 
 import '../features/listen/renderer/renderer.js';
 
@@ -298,7 +297,6 @@ export class PickleGlassApp extends LitElement {
         
         return html`
             ${content}
-            <continuous-listen-indicator></continuous-listen-indicator>
         `;
     }
 }

@@ -540,6 +540,20 @@ function createWindows() {
         }
     });
 
+    ipcMain.handle('pause-listening', async () => {
+        if (global.continuousListenService) {
+            await global.continuousListenService.pauseListening();
+            console.log('[WindowManager] Paused continuous listening');
+        }
+    });
+
+    ipcMain.handle('resume-listening', async () => {
+        if (global.continuousListenService) {
+            await global.continuousListenService.resumeListening();
+            console.log('[WindowManager] Resumed continuous listening');
+        }
+    });
+
     ipcMain.handle('send-question-to-ask', (event, question) => {
         const askWindow = windowPool.get('ask');
         if (askWindow && !askWindow.isDestroyed()) {
@@ -552,34 +566,8 @@ function createWindows() {
         }
     });
 
-    ipcMain.handle('adjust-window-height', (event, targetHeight) => {
-        const senderWindow = BrowserWindow.fromWebContents(event.sender);
-        if (senderWindow) {
-            const wasResizable = senderWindow.isResizable();
-            if (!wasResizable) {
-                senderWindow.setResizable(true);
-            }
-
-            const currentBounds = senderWindow.getBounds();
-            const minHeight = senderWindow.getMinimumSize()[1];
-            const maxHeight = senderWindow.getMaximumSize()[1];
-            
-            let adjustedHeight;
-            if (maxHeight === 0) {
-                adjustedHeight = Math.max(minHeight, targetHeight);
-            } else {
-                adjustedHeight = Math.max(minHeight, Math.min(maxHeight, targetHeight));
-            }
-            
-            senderWindow.setSize(currentBounds.width, adjustedHeight, false);
-
-            if (!wasResizable) {
-                senderWindow.setResizable(false);
-            }
-
-            updateLayout();
-        }
-    });
+    // Note: adjust-window-height is now registered in registerEarlyIpcHandlers()
+    // to avoid race conditions during window initialization
 
     ipcMain.on('session-did-close', () => {
         const listenWindow = windowPool.get('listen');
@@ -1490,17 +1478,34 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, movementMan
                 }
                 
                 const isListening = global.continuousListenService.getContinuousListeningState();
-                console.log('Current listening state:', isListening);
+                const isPaused = global.continuousListenService.getPausedState();
+                const isProcessing = global.continuousListenService.isProcessingLLM;
+                console.log('Current listening state:', isListening, 'Paused:', isPaused, 'Processing:', isProcessing);
                 console.log('Window pool size:', windowPool.size);
                 
+                // If processing LLM, abort it and resume
+                if (isProcessing && global.continuousListenService.currentAbortController) {
+                    console.log('ACTION: Aborting LLM processing');
+                    global.continuousListenService.currentAbortController.abort();
+                    return;
+                }
+                
                 if (isListening) {
-                    // If listening is ON, toggle it OFF
-                    console.log('ACTION: Stopping continuous listening');
-                    sendToRenderer('toggle-continuous-listening');
+                    if (isPaused) {
+                        // If already paused, resume listening
+                        console.log('ACTION: Resuming continuous listening');
+                        await global.continuousListenService.resumeListening();
+                    } else {
+                        // If listening is ON and not paused, enter pause mode
+                        console.log('ACTION: Entering pause mode and sending to LLM');
+                        await global.continuousListenService.pauseListening();
+                        // Send conversation to LLM when entering pause mode
+                        sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
+                    }
                 } else {
-                    // If listening is OFF, send conversation to LLM
-                    console.log('ACTION: Sending conversation to LLM');
-                    sendToRenderer('send-conversation-to-llm', { includeScreenshot: false });
+                    // If listening is OFF, start continuous listening
+                    console.log('ACTION: Starting continuous listening');
+                    sendToRenderer('toggle-continuous-listening');
                 }
             });
             console.log(`Registered Cmd+/ handler: ${keybinds.sendConversation}`);
@@ -1594,6 +1599,39 @@ async function captureScreenshot(options = {}) {
     }
 }
 
+// Register critical IPC handlers that need to be available immediately
+function registerEarlyIpcHandlers() {
+    // Register adjust-window-height handler early to avoid race conditions
+    ipcMain.handle('adjust-window-height', (event, targetHeight) => {
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        if (senderWindow) {
+            const wasResizable = senderWindow.isResizable();
+            if (!wasResizable) {
+                senderWindow.setResizable(true);
+            }
+
+            const currentBounds = senderWindow.getBounds();
+            const minHeight = senderWindow.getMinimumSize()[1];
+            const maxHeight = senderWindow.getMaximumSize()[1];
+            
+            let adjustedHeight;
+            if (maxHeight === 0) {
+                adjustedHeight = Math.max(minHeight, targetHeight);
+            } else {
+                adjustedHeight = Math.max(minHeight, Math.min(maxHeight, targetHeight));
+            }
+            
+            senderWindow.setSize(currentBounds.width, adjustedHeight, false);
+            
+            if (!wasResizable) {
+                senderWindow.setResizable(false);
+            }
+            
+            updateLayout();
+        }
+    });
+}
+
 module.exports = {
     createWindows,
     windowPool,
@@ -1602,4 +1640,6 @@ module.exports = {
     getStoredApiKey,
     getStoredProvider,
     captureScreenshot,
+    registerEarlyIpcHandlers,
+    updateLayout,
 };

@@ -89,14 +89,14 @@ export class SettingsView extends LitElement {
         }
 
         .app-title {
-            font-size: 13px;
+            font-size: 15px;
             font-weight: 500;
             color: white;
             margin: 0 0 4px 0;
         }
 
         .account-info {
-            font-size: 11px;
+            font-size: 13px;
             color: rgba(255, 255, 255, 0.7);
             margin: 0;
         }
@@ -131,7 +131,7 @@ export class SettingsView extends LitElement {
             align-items: center;
             padding: 4px 0;
             color: white;
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .shortcut-name {
@@ -152,7 +152,7 @@ export class SettingsView extends LitElement {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 500;
             color: rgba(255, 255, 255, 0.9);
         }
@@ -175,7 +175,7 @@ export class SettingsView extends LitElement {
             border-radius: 4px;
             color: white;
             padding: 5px 10px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 400;
             cursor: pointer;
             transition: all 0.15s ease;
@@ -230,7 +230,7 @@ export class SettingsView extends LitElement {
             color: white;
             border-radius: 4px;
             padding: 4px;
-            font-size: 11px;
+            font-size: 13px;
             margin-bottom: 4px;
             box-sizing: border-box;
         }
@@ -253,19 +253,19 @@ export class SettingsView extends LitElement {
         }
 
         .preset-title {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 500;
             color: white;
         }
 
         .preset-count {
-            font-size: 9px;
+            font-size: 11px;
             color: rgba(255, 255, 255, 0.5);
             margin-left: 4px;
         }
 
         .preset-toggle {
-            font-size: 10px;
+            font-size: 12px;
             color: rgba(255, 255, 255, 0.6);
             cursor: pointer;
             padding: 2px 4px;
@@ -294,7 +294,7 @@ export class SettingsView extends LitElement {
             border-radius: 3px;
             cursor: pointer;
             transition: all 0.15s ease;
-            font-size: 11px;
+            font-size: 13px;
             border: 1px solid transparent;
         }
 
@@ -323,7 +323,7 @@ export class SettingsView extends LitElement {
         }
 
         .preset-status {
-            font-size: 9px;
+            font-size: 11px;
             color: rgba(0, 122, 255, 0.8);
             font-weight: 500;
             margin-left: 6px;
@@ -333,7 +333,7 @@ export class SettingsView extends LitElement {
             padding: 12px 8px;
             text-align: center;
             color: rgba(255, 255, 255, 0.5);
-            font-size: 10px;
+            font-size: 12px;
             line-height: 1.4;
         }
 
@@ -353,7 +353,7 @@ export class SettingsView extends LitElement {
             justify-content: center;
             padding: 20px;
             color: rgba(255, 255, 255, 0.7);
-            font-size: 11px;
+            font-size: 13px;
         }
 
         .loading-spinner {

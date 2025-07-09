@@ -89,7 +89,7 @@ export class ApiKeyHeader extends LitElement {
             justify-content: center;
             transition: all 0.15s ease;
             z-index: 10;
-            font-size: 14px;
+            font-size: 16px;
             line-height: 1;
             padding: 0;
         }
@@ -105,7 +105,7 @@ export class ApiKeyHeader extends LitElement {
 
         .title {
             color: white;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 500; /* Medium */
             margin: 0;
             text-align: center;
@@ -123,7 +123,7 @@ export class ApiKeyHeader extends LitElement {
         .error-message {
             color: rgba(239, 68, 68, 0.9);
             font-weight: 500;
-            font-size: 11px;
+            font-size: 13px;
             height: 14px;
             text-align: center;
             margin-bottom: 4px;
@@ -137,7 +137,7 @@ export class ApiKeyHeader extends LitElement {
             border: none;
             padding: 0 10px;
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 400; /* Regular */
             margin-bottom: 6px;
             text-align: center;
@@ -161,7 +161,7 @@ export class ApiKeyHeader extends LitElement {
             border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 0 10px;
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 400;
             margin-bottom: 6px;
             text-align: center;
@@ -200,7 +200,7 @@ export class ApiKeyHeader extends LitElement {
             border: none;
             border-radius: 10px;
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500; /* Medium */
             cursor: pointer;
             transition: background 0.15s ease;
@@ -235,14 +235,14 @@ export class ApiKeyHeader extends LitElement {
 
         .or-text {
             color: rgba(255, 255, 255, 0.5);
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500; /* Medium */
             margin: 10px 0;
         }
         
         .provider-label {
             color: rgba(255, 255, 255, 0.7);
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 400;
             margin-bottom: 4px;
             width: 100%;

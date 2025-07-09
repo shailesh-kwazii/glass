@@ -162,6 +162,22 @@ export class MainHeader extends LitElement {
             background: rgba(255, 20, 20, 0.6);
         }
 
+        .listen-button.processing {
+            cursor: wait;
+            opacity: 0.8;
+        }
+
+        .listen-button.processing::before {
+            background: rgba(138, 43, 226, 0.5);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 0.9; }
+            100% { opacity: 0.6; }
+        }
+
         .listen-button:hover::before {
             background: rgba(255, 255, 255, 0.18);
         }
@@ -232,7 +248,7 @@ export class MainHeader extends LitElement {
 
         .action-text-content {
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-family: 'Helvetica Neue', sans-serif;
             font-weight: 500; /* Medium */
             word-wrap: break-word;
@@ -260,7 +276,7 @@ export class MainHeader extends LitElement {
 
         .icon-box {
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-family: 'Helvetica Neue', sans-serif;
             font-weight: 500;
             background-color: rgba(255, 255, 255, 0.1);
@@ -353,6 +369,8 @@ export class MainHeader extends LitElement {
         this.hasSlidIn = false;
         this.settingsHideTimer = null;
         this.isSessionActive = false;
+        this.isPaused = false;
+        this.isProcessing = false;
         this.animationEndTimer = null;
         this.handleMouseMove = this.handleMouseMove.bind(this);
         this.handleMouseUp = this.handleMouseUp.bind(this);
@@ -500,7 +518,16 @@ export class MainHeader extends LitElement {
             this._sessionStateListener = (event, { isActive }) => {
                 this.isSessionActive = isActive;
             };
+            this._listenStateListener = (event, { isListening, isPaused, isProcessing }) => {
+                // Update session active state based on isListening
+                this.isSessionActive = isListening || false;
+                if (isListening) {
+                    this.isPaused = isPaused || false;
+                    this.isProcessing = isProcessing || false;
+                }
+            };
             ipcRenderer.on('session-state-changed', this._sessionStateListener);
+            ipcRenderer.on('continuous-listen-state', this._listenStateListener);
         }
     }
 
@@ -517,6 +544,9 @@ export class MainHeader extends LitElement {
             const { ipcRenderer } = window.require('electron');
             if (this._sessionStateListener) {
                 ipcRenderer.removeListener('session-state-changed', this._sessionStateListener);
+            }
+            if (this._listenStateListener) {
+                ipcRenderer.removeListener('continuous-listen-state', this._listenStateListener);
             }
         }
     }
@@ -571,11 +601,30 @@ export class MainHeader extends LitElement {
         return html`
             <div class="header" @mousedown=${this.handleMouseDown}>
                 <button 
-                    class="listen-button ${this.isSessionActive ? 'active' : ''}"
-                    @click=${() => this.invoke(this.isSessionActive ? 'close-session' : 'toggle-feature', 'listen')}
+                    class="listen-button ${this.isSessionActive ? 'active' : ''} ${this.isProcessing ? 'processing' : ''}"
+                    ?disabled=${this.isProcessing}
+                    @click=${() => {
+                        if (!this.isSessionActive) {
+                            this.invoke('toggle-continuous-listening');
+                        } else if (this.isPaused) {
+                            this.invoke('resume-listening');
+                        } else {
+                            // Enter pause mode and send to LLM
+                            this.invoke('pause-listening');
+                            this.invoke('send-conversation-to-llm', { includeScreenshot: false });
+                        }
+                    }}
+                    @contextmenu=${(e) => {
+                        e.preventDefault();
+                        if (this.isSessionActive) {
+                            // Right-click to stop the session
+                            this.invoke('stop-continuous-listening');
+                        }
+                    }}
+                    title="${this.isSessionActive ? 'Right-click to stop' : 'Start listening'}"
                 >
                     <div class="action-text">
-                        <div class="action-text-content">${this.isSessionActive ? 'Stop' : 'Listen'}</div>
+                        <div class="action-text-content">${!this.isSessionActive ? 'Listen' : (this.isProcessing ? 'Processing...' : (this.isPaused ? 'Resume' : 'Pause'))}</div>
                     </div>
                     <div class="listen-icon">
                         ${this.isSessionActive
@@ -594,21 +643,6 @@ export class MainHeader extends LitElement {
                             `}
                     </div>
                 </button>
-
-                <div class="header-actions ask-action" @click=${() => this.invoke('toggle-feature', 'ask')}>
-                    <div class="action-text">
-                        <div class="action-text-content">Ask</div>
-                    </div>
-                    <div class="icon-container ask-icons">
-                        <div class="icon-box">⌘</div>
-                        <div class="icon-box">
-                            <svg viewBox="0 0 15 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path fill-rule="evenodd" clip-rule="evenodd" d="M2.41797 8.16406C2.41797 8.00935 2.47943 7.86098 2.58882 7.75158C2.69822 7.64219 2.84659 7.58073 3.0013 7.58073H10.0013C10.4654 7.58073 10.9106 7.39636 11.2387 7.06817C11.5669 6.73998 11.7513 6.29486 11.7513 5.83073V3.4974C11.7513 3.34269 11.8128 3.19431 11.9222 3.08492C12.0316 2.97552 12.1799 2.91406 12.3346 2.91406C12.4893 2.91406 12.6377 2.97552 12.7471 3.08492C12.8565 3.19431 12.918 3.34269 12.918 3.4974V5.83073C12.918 6.60428 12.6107 7.34614 12.0637 7.89312C11.5167 8.44011 10.7748 8.7474 10.0013 8.7474H3.0013C2.84659 8.7474 2.69822 8.68594 2.58882 8.57654C2.47943 8.46715 2.41797 8.31877 2.41797 8.16406Z" fill="white"/>
-                                <path fill-rule="evenodd" clip-rule="evenodd" d="M2.58876 8.57973C2.4794 8.47034 2.41797 8.32199 2.41797 8.16731C2.41797 8.01263 2.4794 7.86429 2.58876 7.75489L4.92209 5.42156C5.03211 5.3153 5.17946 5.25651 5.33241 5.25783C5.48536 5.25916 5.63167 5.32051 5.73982 5.42867C5.84798 5.53682 5.90932 5.68313 5.91065 5.83608C5.91198 5.98903 5.85319 6.13638 5.74693 6.24639L3.82601 8.16731L5.74693 10.0882C5.80264 10.142 5.84708 10.2064 5.87765 10.2776C5.90823 10.3487 5.92432 10.4253 5.92499 10.5027C5.92566 10.5802 5.9109 10.657 5.88157 10.7287C5.85224 10.8004 5.80893 10.8655 5.75416 10.9203C5.69939 10.9751 5.63426 11.0184 5.56257 11.0477C5.49088 11.077 5.41406 11.0918 5.33661 11.0911C5.25916 11.0905 5.18261 11.0744 5.11144 11.0438C5.04027 11.0132 4.9759 10.9688 4.92209 10.9131L2.58876 8.57973Z" fill="white"/>
-                            </svg>
-                        </div>
-                    </div>
-                </div>
 
                 <div class="header-actions" @click=${() => this.invoke('toggle-all-windows-visibility')}>
                     <div class="action-text">

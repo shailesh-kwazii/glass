@@ -143,7 +143,7 @@ export class AssistantView extends LitElement {
 
         .bar-left-text {
             color: white;
-            font-size: 13px;
+            font-size: 15px;
             font-family: 'Helvetica Neue', sans-serif;
             font-weight: 500;
             position: relative;
@@ -196,7 +196,7 @@ export class AssistantView extends LitElement {
             box-shadow: none;
             padding: 4px 8px;
             border-radius: 5px;
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             height: 24px;
@@ -264,7 +264,7 @@ export class AssistantView extends LitElement {
 
         .timer {
             font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 10px;
+            font-size: 12px;
             color: rgba(255, 255, 255, 0.7);
         }
         

@@ -442,6 +442,26 @@ class SttService {
         }
     }
 
+    async pauseAudioCapture() {
+        console.log('[SttService] Pausing audio capture...');
+        // Stop system audio capture but keep sessions alive
+        this.stopMacOSAudioCapture();
+        
+        // Send pause signal to renderer for microphone capture
+        this.sendToRenderer('pause-microphone-capture');
+    }
+
+    async resumeAudioCapture() {
+        console.log('[SttService] Resuming audio capture...');
+        // Restart system audio capture if sessions are active
+        if (this.isSessionActive() && process.platform === 'darwin') {
+            await this.startMacOSAudioCapture();
+        }
+        
+        // Send resume signal to renderer for microphone capture
+        this.sendToRenderer('resume-microphone-capture');
+    }
+
     isSessionActive() {
         return !!this.mySttSession && !!this.theirSttSession;
     }
@@ -487,6 +507,14 @@ class SttService {
         this.theirLastPartialText = '';
         this.myCompletionBuffer = '';
         this.theirCompletionBuffer = '';
+    }
+
+    sendToRenderer(channel, data) {
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (!win.isDestroyed()) {
+                win.webContents.send(channel, data);
+            }
+        });
     }
 }
 

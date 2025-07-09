@@ -17,8 +17,34 @@ class ContinuousListenService {
         this.currentSessionId = null;
         this.screenshotInterval = null;
         this.currentScreenshot = null;
+        this.pendingTranscriptions = []; // Buffer for transcriptions
+        this.isProcessingLLM = false; // Flag to prevent concurrent LLM requests
+        this.currentAbortController = null; // For aborting LLM streaming
         
         this.setupServiceCallbacks();
+    }
+    
+    showListenWindow() {
+        const listenWindow = BrowserWindow.getAllWindows().find(win => 
+            win.webContents.getURL().includes('view=listen')
+        );
+        if (listenWindow && !listenWindow.isDestroyed()) {
+            listenWindow.show();
+            // Force layout update after showing
+            const windowManager = require('../../electron/windowManager');
+            if (windowManager && typeof windowManager.updateLayout === 'function') {
+                windowManager.updateLayout();
+            }
+        }
+    }
+    
+    hideListenWindow() {
+        const listenWindow = BrowserWindow.getAllWindows().find(win => 
+            win.webContents.getURL().includes('view=listen')
+        );
+        if (listenWindow && !listenWindow.isDestroyed()) {
+            listenWindow.hide();
+        }
     }
 
     setupServiceCallbacks() {
@@ -46,6 +72,9 @@ class ContinuousListenService {
         const timestamp = new Date().toISOString();
         const entry = { speaker, text, timestamp };
         
+        // Add to pending transcriptions buffer instead of sending immediately
+        this.pendingTranscriptions.push(entry);
+        
         // Add to conversation history with rolling buffer
         this.conversationHistory.push(entry);
         if (this.conversationHistory.length > this.maxHistorySize) {
@@ -66,8 +95,11 @@ class ContinuousListenService {
             }
         }
         
-        // Send to renderer for display
-        this.sendToRenderer('continuous-transcription', entry);
+        // Don't send to renderer immediately - wait for cmd+/
+        // Update transcription count for the indicator
+        this.sendToRenderer('continuous-transcription-buffered', { 
+            count: this.pendingTranscriptions.length 
+        });
     }
 
     async startContinuousListening() {
@@ -126,6 +158,9 @@ class ContinuousListenService {
                 isPaused: false 
             });
             
+            // Show the listen window when continuous listening starts
+            this.showListenWindow();
+            
             console.log('Continuous listening started');
             return true;
         } catch (error) {
@@ -140,6 +175,34 @@ class ContinuousListenService {
 
     async pauseListening() {
         this.isPaused = true;
+        
+        // Stop audio capture when pausing
+        if (this.sttService) {
+            await this.sttService.pauseAudioCapture();
+        }
+        
+        // Flush pending transcriptions to SttView when pausing
+        if (this.pendingTranscriptions.length > 0) {
+            for (const entry of this.pendingTranscriptions) {
+                this.sendToRenderer('stt-update', {
+                    speaker: entry.speaker,
+                    text: entry.text,
+                    isPartial: false,
+                    isFinal: true,
+                    timestamp: entry.timestamp
+                });
+            }
+            // Note: Don't clear pending transcriptions here - they'll be cleared after LLM processing
+        } else {
+            // No audio captured yet - provide feedback
+            this.sendToRenderer('stt-update', {
+                speaker: 'System',
+                text: 'No audio captured yet. Start speaking and I\'ll help you when you pause.',
+                isPartial: false,
+                isFinal: true
+            });
+        }
+        
         this.sendToRenderer('continuous-listen-state', { 
             isListening: this.isListening, 
             isPaused: true 
@@ -148,6 +211,12 @@ class ContinuousListenService {
 
     async resumeListening() {
         this.isPaused = false;
+        
+        // Resume audio capture
+        if (this.sttService) {
+            await this.sttService.resumeAudioCapture();
+        }
+        
         this.sendToRenderer('continuous-listen-state', { 
             isListening: this.isListening, 
             isPaused: false 
@@ -181,6 +250,7 @@ class ContinuousListenService {
             this.isListening = false;
             this.isPaused = false;
             this.currentSessionId = null;
+            this.pendingTranscriptions = []; // Clear pending transcriptions
             
             console.log('[stopContinuousListening] State updated - isListening:', this.isListening);
             
@@ -188,6 +258,9 @@ class ContinuousListenService {
                 isListening: false, 
                 isPaused: false 
             });
+            
+            // Hide the listen window when continuous listening stops
+            this.hideListenWindow();
             
             console.log('[stopContinuousListening] Successfully stopped');
         } catch (error) {
@@ -214,6 +287,10 @@ class ContinuousListenService {
 
     getContinuousListeningState() {
         return this.isListening;
+    }
+
+    getPausedState() {
+        return this.isPaused;
     }
 
     startScreenshotCapture() {
@@ -257,22 +334,54 @@ class ContinuousListenService {
     }
 
     async sendToLLM(includeScreenshot = false) {
+        // Prevent concurrent LLM requests
+        if (this.isProcessingLLM) {
+            console.log('[sendToLLM] Already processing LLM request, ignoring');
+            return;
+        }
+        
+        // Abort any existing streaming operation
+        if (this.currentAbortController) {
+            this.currentAbortController.abort();
+            this.currentAbortController = null;
+        }
+        
         // Only pause if we're actually listening
         if (this.isListening && !this.isPaused) {
             await this.pauseListening();
         }
         
+        this.isProcessingLLM = true;
+        this.sendToRenderer('continuous-listen-state', { 
+            isListening: this.isListening, 
+            isPaused: this.isPaused,
+            isProcessing: true 
+        });
+        
         try {
+            // First, send all pending transcriptions to the UI
+            if (this.pendingTranscriptions.length > 0) {
+                for (const entry of this.pendingTranscriptions) {
+                    this.sendToRenderer('stt-update', {
+                    speaker: entry.speaker,
+                    text: entry.text,
+                    isPartial: false,
+                    isFinal: true,
+                    timestamp: entry.timestamp
+                });
+                }
+                // Clear pending transcriptions after sending
+                this.pendingTranscriptions = [];
+            }
+            
             const conversationText = this.getConversationText();
             
-            // If no conversation history, return early
-            if (!conversationText || this.conversationHistory.length === 0) {
-                this.sendToRenderer('stt-update', {
-                    speaker: 'System',
-                    text: 'No conversation history available. Start listening first to capture audio.',
-                    isPartial: false,
-                    isFinal: true
-                });
+            // If no conversation history, use a default prompt
+            const hasConversation = conversationText && this.conversationHistory.length > 0;
+            
+            // If buffer is empty and no conversation, don't send to LLM
+            if (!hasConversation && this.pendingTranscriptions.length === 0) {
+                console.log('[sendToLLM] No content to send to LLM');
                 return;
             }
             const screenshot = includeScreenshot ? this.currentScreenshot : null;
@@ -302,7 +411,9 @@ class ContinuousListenService {
             const provider = await getStoredProvider();
             
             // Build system prompt
-            const systemPrompt = getSystemPrompt('pickle_glass', conversationText, false);
+            const systemPrompt = hasConversation 
+                ? getSystemPrompt('pickle_glass', conversationText, false)
+                : "You are a helpful AI assistant. Provide useful insights and assistance based on the context provided.";
             
             // Prepare messages for LLM
             const messages = [
@@ -310,9 +421,13 @@ class ContinuousListenService {
                 {
                     role: 'user',
                     content: includeScreenshot && screenshot ? [
-                        { type: 'text', text: 'Based on the conversation and current screen, provide helpful analysis or suggestions.' },
+                        { type: 'text', text: hasConversation 
+                            ? 'Based on the conversation and current screen, provide helpful analysis or suggestions.'
+                            : 'Based on the current screen, provide helpful analysis or suggestions.' },
                         { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshot.base64}` } }
-                    ] : 'Based on the conversation, provide helpful analysis or suggestions.'
+                    ] : hasConversation 
+                        ? 'Based on the conversation, provide helpful analysis or suggestions.'
+                        : 'Hello! I\'m ready to assist you. Start speaking to begin a conversation.'
                 }
             ];
             
@@ -337,14 +452,24 @@ class ContinuousListenService {
                 messageId: aiMessageId
             });
             
+            // Create abort controller for this request
+            this.currentAbortController = new AbortController();
+            
             // Stream the response
             const response = await streamingLLM.streamChat(messages);
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            try {
+                while (true) {
+                    // Check if aborted
+                    if (this.currentAbortController.signal.aborted) {
+                        console.log('[sendToLLM] Streaming aborted by user');
+                        break;
+                    }
+                    
+                    const { done, value } = await reader.read();
+                    if (done) break;
                 
                 const chunk = decoder.decode(value);
                 const lines = chunk.split('\n').filter(line => line.trim() !== '');
@@ -404,14 +529,67 @@ class ContinuousListenService {
                     }
                 }
             }
+            } finally {
+                // Always release the reader lock
+                try {
+                    reader.releaseLock();
+                } catch (e) {
+                    // Ignore errors when releasing lock
+                }
+            }
+            
+            // Clear abort controller
+            this.currentAbortController = null;
+            
+            // Resume listening after sending to LLM (only if not aborted)
+            if (this.isListening && this.isPaused && !this.currentAbortController?.signal.aborted) {
+                await this.resumeListening();
+            }
         } catch (error) {
             console.error('Error in sendToLLM:', error);
+            
+            // Determine error type and provide specific guidance
+            let errorMessage = 'An error occurred while processing your request.';
+            
+            if (error.name === 'AbortError') {
+                // User aborted the request
+                errorMessage = 'Request cancelled. Press cmd+/ to try again.';
+            } else if (error.message?.includes('API key')) {
+                errorMessage = 'API key not configured. Please check your settings.';
+            } else if (error.message?.includes('quota') || error.message?.includes('rate limit')) {
+                errorMessage = 'API rate limit exceeded. Please try again later.';
+            } else if (error.message?.includes('network') || error.code === 'ENOTFOUND') {
+                errorMessage = 'Network error. Please check your internet connection.';
+            } else if (error.status === 401) {
+                errorMessage = 'Invalid API key. Please check your settings.';
+            } else if (error.status === 429) {
+                errorMessage = 'Too many requests. Please wait a moment and try again.';
+            } else if (error.status >= 500) {
+                errorMessage = 'Server error. The AI service may be temporarily unavailable.';
+            } else {
+                errorMessage = `Error: ${error.message || 'Unknown error occurred'}`;
+            }
+            
             // Send error message to UI
             this.sendToRenderer('stt-update', {
                 speaker: 'System',
-                text: `Error: ${error.message}`,
+                text: errorMessage,
                 isPartial: false,
                 isFinal: true
+            });
+            
+            // Resume listening even after error (unless aborted)
+            if (this.isListening && this.isPaused && error.name !== 'AbortError') {
+                await this.resumeListening();
+            }
+        } finally {
+            // Always reset processing flag and update state
+            this.isProcessingLLM = false;
+            this.currentAbortController = null;
+            this.sendToRenderer('continuous-listen-state', { 
+                isListening: this.isListening, 
+                isPaused: this.isPaused,
+                isProcessing: false 
             });
         }
     }

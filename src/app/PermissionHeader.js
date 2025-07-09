@@ -82,7 +82,7 @@ export class PermissionHeader extends LitElement {
             justify-content: center;
             transition: all 0.15s ease;
             z-index: 10;
-            font-size: 14px;
+            font-size: 16px;
             line-height: 1;
             padding: 0;
         }
@@ -98,7 +98,7 @@ export class PermissionHeader extends LitElement {
 
         .title {
             color: white;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 500;
             margin: 0;
             text-align: center;
@@ -115,7 +115,7 @@ export class PermissionHeader extends LitElement {
 
         .subtitle {
             color: rgba(255, 255, 255, 0.7);
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 400;
             text-align: center;
             margin-bottom: 12px;
@@ -136,7 +136,7 @@ export class PermissionHeader extends LitElement {
             align-items: center;
             gap: 6px;
             color: rgba(255, 255, 255, 0.8);
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 400;
         }
 
@@ -163,7 +163,7 @@ export class PermissionHeader extends LitElement {
             border: none;
             border-radius: 10px;
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: background 0.15s ease;
@@ -204,7 +204,7 @@ export class PermissionHeader extends LitElement {
             border: none;
             border-radius: 10px;
             color: white;
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: background 0.15s ease;

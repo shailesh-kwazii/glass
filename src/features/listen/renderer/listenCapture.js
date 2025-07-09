@@ -23,6 +23,10 @@ let lastScreenshotBase64 = null;
 let systemAudioBuffer = [];
 const MAX_SYSTEM_BUFFER_SIZE = 10;
 
+// Pause state tracking
+let isPaused = false;
+let pausedProcessors = [];
+
 // ---------------------------
 // Utility helpers (exact from renderer.js)
 // ---------------------------
@@ -336,10 +340,12 @@ function setupMicProcessing(micStream) {
             const pcmData16 = convertFloat32ToInt16(processedChunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (!isPaused) {
+                await ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -369,10 +375,12 @@ function setupLinuxMicProcessing(micStream) {
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-audio-content', {
-                data: base64Data,
-                mimeType: 'audio/pcm;rate=24000',
-            });
+            if (!isPaused) {
+                await ipcRenderer.invoke('send-audio-content', {
+                    data: base64Data,
+                    mimeType: 'audio/pcm;rate=24000',
+                });
+            }
         }
     };
 
@@ -403,10 +411,12 @@ function setupSystemAudioProcessing(systemStream) {
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
             try {
-                await ipcRenderer.invoke('send-system-audio-content', {
-                    data: base64Data,
-                    mimeType: 'audio/pcm;rate=24000',
-                });
+                if (!isPaused) {
+                    await ipcRenderer.invoke('send-system-audio-content', {
+                        data: base64Data,
+                        mimeType: 'audio/pcm;rate=24000',
+                    });
+                }
             } catch (error) {
                 console.error('Failed to send system audio:', error);
             }
@@ -716,6 +726,50 @@ function stopCapture() {
 }
 
 // ---------------------------
+// Pause/Resume functions
+// ---------------------------
+function pauseMicrophoneCapture() {
+    console.log('[listenCapture] Pausing microphone capture');
+    isPaused = true;
+    
+    // Disconnect audio processors
+    if (audioProcessor) {
+        audioProcessor.disconnect();
+        pausedProcessors.push({ processor: audioProcessor, type: 'mic' });
+    }
+    if (systemAudioProcessor) {
+        systemAudioProcessor.disconnect();
+        pausedProcessors.push({ processor: systemAudioProcessor, type: 'system' });
+    }
+}
+
+function resumeMicrophoneCapture() {
+    console.log('[listenCapture] Resuming microphone capture');
+    isPaused = false;
+    
+    // Reconnect audio processors
+    pausedProcessors.forEach(({ processor, type }) => {
+        if (type === 'mic' && audioContext) {
+            processor.connect(audioContext.destination);
+        } else if (type === 'system' && systemAudioContext) {
+            processor.connect(systemAudioContext.destination);
+        }
+    });
+    pausedProcessors = [];
+}
+
+// ---------------------------
+// IPC Event Listeners
+// ---------------------------
+ipcRenderer.on('pause-microphone-capture', () => {
+    pauseMicrophoneCapture();
+});
+
+ipcRenderer.on('resume-microphone-capture', () => {
+    resumeMicrophoneCapture();
+});
+
+// ---------------------------
 // Exports & global registration
 // ---------------------------
 module.exports = {
@@ -723,6 +777,8 @@ module.exports = {
     stopCapture,
     captureManualScreenshot,
     getCurrentScreenshot,
+    pauseMicrophoneCapture,
+    resumeMicrophoneCapture,
     isLinux,
     isMacOS,
 };
