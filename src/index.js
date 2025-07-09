@@ -13,7 +13,6 @@ if (require('electron-squirrel-startup')) {
 
 const { app, BrowserWindow, shell, ipcMain, dialog, desktopCapturer, session } = require('electron');
 const { createWindows, registerEarlyIpcHandlers } = require('./electron/windowManager.js');
-const ListenService = require('./features/listen/listenService');
 const ContinuousListenService = require('./features/listen/continuousListenService');
 const databaseInitializer = require('./common/services/databaseInitializer');
 const authService = require('./common/services/authService');
@@ -28,10 +27,6 @@ const sessionRepository = require('./common/repositories/session');
 
 const eventBridge = new EventEmitter();
 let WEB_PORT = 3000;
-
-const listenService = new ListenService();
-// Make listenService globally accessible so other modules (e.g., windowManager, askService) can reuse the same instance
-global.listenService = listenService;
 
 const continuousListenService = new ContinuousListenService();
 global.continuousListenService = continuousListenService;
@@ -59,17 +54,17 @@ function setupProtocolHandling() {
     // Handle protocol URLs on Windows/Linux
     app.on('second-instance', (event, commandLine, workingDirectory) => {
         console.log('[Protocol] Second instance command line:', commandLine);
-        
+
         focusMainWindow();
-        
+
         let protocolUrl = null;
-        
+
         // Search through all command line arguments for a valid protocol URL
         for (const arg of commandLine) {
             if (arg && typeof arg === 'string' && arg.startsWith('pickleglass://')) {
                 // Clean up the URL by removing problematic characters
                 const cleanUrl = arg.replace(/[\\₩]/g, '');
-                
+
                 // Additional validation for Windows
                 if (process.platform === 'win32') {
                     // On Windows, ensure the URL doesn't contain file path indicators
@@ -83,7 +78,7 @@ function setupProtocolHandling() {
                 }
             }
         }
-        
+
         if (protocolUrl) {
             console.log('[Protocol] Valid URL found from second instance:', protocolUrl);
             handleCustomUrl(protocolUrl);
@@ -97,7 +92,7 @@ function setupProtocolHandling() {
     app.on('open-url', (event, url) => {
         event.preventDefault();
         console.log('[Protocol] Received URL via open-url:', url);
-        
+
         if (!url || !url.startsWith('pickleglass://')) {
             console.warn('[Protocol] Invalid URL format:', url);
             return;
@@ -122,7 +117,7 @@ function focusMainWindow() {
             return true;
         }
     }
-    
+
     // Fallback: focus any available window
     const windows = BrowserWindow.getAllWindows();
     if (windows.length > 0) {
@@ -133,7 +128,7 @@ function focusMainWindow() {
             return true;
         }
     }
-    
+
     return false;
 }
 
@@ -142,7 +137,7 @@ if (process.platform === 'win32') {
         if (arg && typeof arg === 'string' && arg.startsWith('pickleglass://')) {
             // Clean up the URL by removing problematic characters (korean characters issue...)
             const cleanUrl = arg.replace(/[\\₩]/g, '');
-            
+
             if (!cleanUrl.includes(':') || cleanUrl.indexOf('://') === cleanUrl.lastIndexOf(':')) {
                 console.log('[Protocol] Found protocol URL in initial arguments:', cleanUrl);
                 pendingDeepLinkUrl = cleanUrl;
@@ -150,7 +145,7 @@ if (process.platform === 'win32') {
             }
         }
     }
-    
+
     console.log('[Protocol] Initial process.argv:', process.argv);
 }
 
@@ -164,45 +159,45 @@ if (!gotTheLock) {
 setupProtocolHandling();
 
 app.whenReady().then(async () => {
-
     // Setup native loopback audio capture for Windows
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-        desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-            // Grant access to the first screen found with loopback audio
-            callback({ video: sources[0], audio: 'loopback' });
-        }).catch((error) => {
-            console.error('Failed to get desktop capturer sources:', error);
-            callback({});
-        });
+        desktopCapturer
+            .getSources({ types: ['screen'] })
+            .then(sources => {
+                // Grant access to the first screen found with loopback audio
+                callback({ video: sources[0], audio: 'loopback' });
+            })
+            .catch(error => {
+                console.error('Failed to get desktop capturer sources:', error);
+                callback({});
+            });
     });
 
     // Initialize core services
     try {
         await databaseInitializer.initialize();
         console.log('>>> [index.js] Database initialized successfully');
-        
+
         // Clean up zombie sessions from previous runs first
         sessionRepository.endAllActiveSessions();
 
         authService.initialize();
-        listenService.setupIpcHandlers();
         continuousListenService.setupIpcHandlers();
         askService.initialize();
         settingsService.initialize();
         setupGeneralIpcHandlers();
-        
+
         // Register critical IPC handlers early to avoid race conditions
         registerEarlyIpcHandlers();
 
         // Start web server and create windows ONLY after all initializations are successful
         WEB_PORT = await startWebStack();
         console.log('Web front-end listening on', WEB_PORT);
-        
+
         createWindows();
-        
+
         // Don't start continuous listening automatically - wait for user to be ready
         // It will start when the user clicks the Listen button or uses cmd+/
-
     } catch (err) {
         console.error('>>> [index.js] Database initialization failed - some features may not work', err);
         // Optionally, show an error dialog to the user
@@ -223,7 +218,6 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-    listenService.stopMacOSAudioCapture();
     if (process.platform !== 'darwin') {
         app.quit();
     }
@@ -231,7 +225,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', async () => {
     console.log('[Shutdown] App is about to quit.');
-    listenService.stopMacOSAudioCapture();
     await sessionRepository.endAllActiveSessions();
     databaseInitializer.close();
 });
@@ -266,7 +259,6 @@ function setupGeneralIpcHandlers() {
     ipcMain.handle('get-preset-templates', () => {
         return presetRepository.getPresetTemplates();
     });
-
 
     ipcMain.handle('get-web-url', () => {
         return process.env.pickleglass_WEB_URL || 'http://localhost:3000';
@@ -316,7 +308,7 @@ function setupWebDataHandlers() {
                     }
                     result = { id };
                     break;
-                
+
                 // USER
                 case 'get-user-profile':
                     result = userRepository.getById(currentUserId);
@@ -354,12 +346,12 @@ function setupWebDataHandlers() {
                     result = presetRepository.delete(payload, currentUserId);
                     settingsService.notifyPresetUpdate('deleted', payload);
                     break;
-                
+
                 // BATCH
                 case 'get-batch-data':
                     const includes = payload ? payload.split(',').map(item => item.trim()) : ['profile', 'presets', 'sessions'];
                     const batchResult = {};
-            
+
                     if (includes.includes('profile')) {
                         batchResult.profile = userRepository.getById(currentUserId);
                     }
@@ -381,33 +373,33 @@ function setupWebDataHandlers() {
             eventBridge.emit(responseChannel, { success: false, error: error.message });
         }
     };
-    
+
     eventBridge.on('web-data-request', handleRequest);
 }
 
 async function handleCustomUrl(url) {
     try {
         console.log('[Custom URL] Processing URL:', url);
-        
+
         // Validate and clean URL
         if (!url || typeof url !== 'string' || !url.startsWith('pickleglass://')) {
             console.error('[Custom URL] Invalid URL format:', url);
             return;
         }
-        
+
         // Clean up URL by removing problematic characters
         const cleanUrl = url.replace(/[\\₩]/g, '');
-        
+
         // Additional validation
         if (cleanUrl !== url) {
             console.log('[Custom URL] Cleaned URL from:', url, 'to:', cleanUrl);
             url = cleanUrl;
         }
-        
+
         const urlObj = new URL(url);
         const action = urlObj.hostname;
         const params = Object.fromEntries(urlObj.searchParams);
-        
+
         console.log('[Custom URL] Action:', action, 'Params:', params);
 
         switch (action) {
@@ -420,37 +412,35 @@ async function handleCustomUrl(url) {
                 if (header) {
                     if (header.isMinimized()) header.restore();
                     header.focus();
-                    
+
                     const targetUrl = `http://localhost:${WEB_PORT}/${action}`;
                     console.log(`[Custom URL] Navigating webview to: ${targetUrl}`);
                     header.webContents.loadURL(targetUrl);
                 }
         }
-
     } catch (error) {
         console.error('[Custom URL] Error parsing URL:', error);
     }
 }
 
-
 function handlePersonalizeFromUrl(params) {
     console.log('[Custom URL] Personalize params:', params);
-    
+
     const { windowPool } = require('./electron/windowManager');
     const header = windowPool.get('header');
-    
+
     if (header) {
         if (header.isMinimized()) header.restore();
         header.focus();
-        
+
         const personalizeUrl = `http://localhost:${WEB_PORT}/settings`;
         console.log(`[Custom URL] Navigating to personalize page: ${personalizeUrl}`);
         header.webContents.loadURL(personalizeUrl);
-        
+
         BrowserWindow.getAllWindows().forEach(win => {
             win.webContents.send('enter-personalize-mode', {
                 message: 'Personalization mode activated',
-                params: params
+                params: params,
             });
         });
     } else {
@@ -458,111 +448,108 @@ function handlePersonalizeFromUrl(params) {
     }
 }
 
-
 async function startWebStack() {
-  console.log('NODE_ENV =', process.env.NODE_ENV); 
-  const isDev = !app.isPackaged;
+    console.log('NODE_ENV =', process.env.NODE_ENV);
+    const isDev = !app.isPackaged;
 
-  const getAvailablePort = () => {
-    return new Promise((resolve, reject) => {
-      const server = require('net').createServer();
-      server.listen(0, (err) => {
-        if (err) reject(err);
-        const port = server.address().port;
-        server.close(() => resolve(port));
-      });
+    const getAvailablePort = () => {
+        return new Promise((resolve, reject) => {
+            const server = require('net').createServer();
+            server.listen(0, err => {
+                if (err) reject(err);
+                const port = server.address().port;
+                server.close(() => resolve(port));
+            });
+        });
+    };
+
+    const apiPort = await getAvailablePort();
+    const frontendPort = await getAvailablePort();
+
+    console.log(`🔧 Allocated ports: API=${apiPort}, Frontend=${frontendPort}`);
+
+    process.env.pickleglass_API_PORT = apiPort.toString();
+    process.env.pickleglass_API_URL = `http://localhost:${apiPort}`;
+    process.env.pickleglass_WEB_PORT = frontendPort.toString();
+    process.env.pickleglass_WEB_URL = `http://localhost:${frontendPort}`;
+
+    console.log(`🌍 Environment variables set:`, {
+        pickleglass_API_URL: process.env.pickleglass_API_URL,
+        pickleglass_WEB_URL: process.env.pickleglass_WEB_URL,
     });
-  };
 
-  const apiPort = await getAvailablePort();
-  const frontendPort = await getAvailablePort();
+    const createBackendApp = require('../pickleglass_web/backend_node');
+    const nodeApi = createBackendApp(eventBridge);
 
-  console.log(`🔧 Allocated ports: API=${apiPort}, Frontend=${frontendPort}`);
+    const staticDir = app.isPackaged ? path.join(process.resourcesPath, 'out') : path.join(__dirname, '..', 'pickleglass_web', 'out');
 
-  process.env.pickleglass_API_PORT = apiPort.toString();
-  process.env.pickleglass_API_URL = `http://localhost:${apiPort}`;
-  process.env.pickleglass_WEB_PORT = frontendPort.toString();
-  process.env.pickleglass_WEB_URL = `http://localhost:${frontendPort}`;
+    const fs = require('fs');
 
-  console.log(`🌍 Environment variables set:`, {
-    pickleglass_API_URL: process.env.pickleglass_API_URL,
-    pickleglass_WEB_URL: process.env.pickleglass_WEB_URL
-  });
-
-  const createBackendApp = require('../pickleglass_web/backend_node');
-  const nodeApi = createBackendApp(eventBridge);
-
-  const staticDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'out')
-    : path.join(__dirname, '..', 'pickleglass_web', 'out');
-
-  const fs = require('fs');
-
-  if (!fs.existsSync(staticDir)) {
-    console.error(`============================================================`);
-    console.error(`[ERROR] Frontend build directory not found!`);
-    console.error(`Path: ${staticDir}`);
-    console.error(`Please run 'npm run build' inside the 'pickleglass_web' directory first.`);
-    console.error(`============================================================`);
-    app.quit();
-    return;
-  }
-
-  const runtimeConfig = {
-    API_URL: `http://localhost:${apiPort}`,
-    WEB_URL: `http://localhost:${frontendPort}`,
-    timestamp: Date.now()
-  };
-  
-  // 쓰기 가능한 임시 폴더에 런타임 설정 파일 생성
-  const tempDir = app.getPath('temp');
-  const configPath = path.join(tempDir, 'runtime-config.json');
-  fs.writeFileSync(configPath, JSON.stringify(runtimeConfig, null, 2));
-  console.log(`📝 Runtime config created in temp location: ${configPath}`);
-
-  const frontSrv = express();
-  
-  // 프론트엔드에서 /runtime-config.json을 요청하면 임시 폴더의 파일을 제공
-  frontSrv.get('/runtime-config.json', (req, res) => {
-    res.sendFile(configPath);
-  });
-
-  frontSrv.use((req, res, next) => {
-    if (req.path.indexOf('.') === -1 && req.path !== '/') {
-      const htmlPath = path.join(staticDir, req.path + '.html');
-      if (fs.existsSync(htmlPath)) {
-        return res.sendFile(htmlPath);
-      }
+    if (!fs.existsSync(staticDir)) {
+        console.error(`============================================================`);
+        console.error(`[ERROR] Frontend build directory not found!`);
+        console.error(`Path: ${staticDir}`);
+        console.error(`Please run 'npm run build' inside the 'pickleglass_web' directory first.`);
+        console.error(`============================================================`);
+        app.quit();
+        return;
     }
-    next();
-  });
-  
-  frontSrv.use(express.static(staticDir));
-  
-  const frontendServer = await new Promise((resolve, reject) => {
-    const server = frontSrv.listen(frontendPort, '127.0.0.1', () => resolve(server));
-    server.on('error', reject);
-    app.once('before-quit', () => server.close());
-  });
 
-  console.log(`✅ Frontend server started on http://localhost:${frontendPort}`);
+    const runtimeConfig = {
+        API_URL: `http://localhost:${apiPort}`,
+        WEB_URL: `http://localhost:${frontendPort}`,
+        timestamp: Date.now(),
+    };
 
-  const apiSrv = express();
-  apiSrv.use(nodeApi);
+    // 쓰기 가능한 임시 폴더에 런타임 설정 파일 생성
+    const tempDir = app.getPath('temp');
+    const configPath = path.join(tempDir, 'runtime-config.json');
+    fs.writeFileSync(configPath, JSON.stringify(runtimeConfig, null, 2));
+    console.log(`📝 Runtime config created in temp location: ${configPath}`);
 
-  const apiServer = await new Promise((resolve, reject) => {
-    const server = apiSrv.listen(apiPort, '127.0.0.1', () => resolve(server));
-    server.on('error', reject);
-    app.once('before-quit', () => server.close());
-  });
+    const frontSrv = express();
 
-  console.log(`✅ API server started on http://localhost:${apiPort}`);
+    // 프론트엔드에서 /runtime-config.json을 요청하면 임시 폴더의 파일을 제공
+    frontSrv.get('/runtime-config.json', (req, res) => {
+        res.sendFile(configPath);
+    });
 
-  console.log(`🚀 All services ready:`);
-  console.log(`   Frontend: http://localhost:${frontendPort}`);
-  console.log(`   API:      http://localhost:${apiPort}`);
+    frontSrv.use((req, res, next) => {
+        if (req.path.indexOf('.') === -1 && req.path !== '/') {
+            const htmlPath = path.join(staticDir, req.path + '.html');
+            if (fs.existsSync(htmlPath)) {
+                return res.sendFile(htmlPath);
+            }
+        }
+        next();
+    });
 
-  return frontendPort;
+    frontSrv.use(express.static(staticDir));
+
+    const frontendServer = await new Promise((resolve, reject) => {
+        const server = frontSrv.listen(frontendPort, '127.0.0.1', () => resolve(server));
+        server.on('error', reject);
+        app.once('before-quit', () => server.close());
+    });
+
+    console.log(`✅ Frontend server started on http://localhost:${frontendPort}`);
+
+    const apiSrv = express();
+    apiSrv.use(nodeApi);
+
+    const apiServer = await new Promise((resolve, reject) => {
+        const server = apiSrv.listen(apiPort, '127.0.0.1', () => resolve(server));
+        server.on('error', reject);
+        app.once('before-quit', () => server.close());
+    });
+
+    console.log(`✅ API server started on http://localhost:${apiPort}`);
+
+    console.log(`🚀 All services ready:`);
+    console.log(`   Frontend: http://localhost:${frontendPort}`);
+    console.log(`   API:      http://localhost:${apiPort}`);
+
+    return frontendPort;
 }
 
 // Auto-update initialization
@@ -581,16 +568,15 @@ function initAutoUpdater() {
         });
 
         // Immediately check for updates & notify
-        autoUpdater.checkForUpdatesAndNotify()
-            .catch(err => {
-                console.error('[AutoUpdater] Error checking for updates:', err);
-            });
+        autoUpdater.checkForUpdatesAndNotify().catch(err => {
+            console.error('[AutoUpdater] Error checking for updates:', err);
+        });
 
         autoUpdater.on('checking-for-update', () => {
             console.log('[AutoUpdater] Checking for updates…');
         });
 
-        autoUpdater.on('update-available', (info) => {
+        autoUpdater.on('update-available', info => {
             console.log('[AutoUpdater] Update available:', info.version);
         });
 
@@ -598,11 +584,11 @@ function initAutoUpdater() {
             console.log('[AutoUpdater] Application is up-to-date');
         });
 
-        autoUpdater.on('error', (err) => {
+        autoUpdater.on('error', err => {
             console.error('[AutoUpdater] Error while updating:', err);
         });
 
-        autoUpdater.on('update-downloaded', (info) => {
+        autoUpdater.on('update-downloaded', info => {
             console.log(`[AutoUpdater] Update downloaded: ${info.version}`);
 
             const dialogOpts = {
@@ -611,10 +597,10 @@ function initAutoUpdater() {
                 title: 'Update Available',
                 message: 'A new version of Glass is ready to be installed.',
                 defaultId: 0,
-                cancelId: 1
+                cancelId: 1,
             };
 
-            dialog.showMessageBox(dialogOpts).then((returnValue) => {
+            dialog.showMessageBox(dialogOpts).then(returnValue => {
                 // returnValue.response 0 is for 'Install Now'
                 if (returnValue.response === 0) {
                     autoUpdater.quitAndInstall();

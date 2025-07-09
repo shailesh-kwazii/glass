@@ -796,6 +796,7 @@ function pauseMicrophoneCapture() {
 
 function resumeMicrophoneCapture() {
     console.log('[listenCapture] ========== RESUME MICROPHONE CAPTURE ==========');
+    console.log('[listenCapture] Function called at:', new Date().toISOString());
     console.log('[listenCapture] Previous isPaused state:', isPaused);
     console.log('[listenCapture] Paused processors to reconnect:', pausedProcessors.length);
     console.log('[listenCapture] Audio contexts:', {
@@ -814,6 +815,8 @@ function resumeMicrophoneCapture() {
             readyState: t.readyState 
         }))
     });
+    console.log('[listenCapture] Audio processor exists:', !!audioProcessor);
+    console.log('[listenCapture] System audio processor exists:', !!systemAudioProcessor);
     
     isPaused = false;
     console.log('[listenCapture] Set isPaused to false');
@@ -894,11 +897,22 @@ ipcRenderer.on('pause-microphone-capture', () => {
 ipcRenderer.on('resume-microphone-capture', () => {
     console.log('[listenCapture] ▶️ IPC EVENT: resume-microphone-capture RECEIVED!');
     console.log('[listenCapture] CRITICAL: About to call resumeMicrophoneCapture()');
+    console.log('[listenCapture] PRE-RESUME State:', {
+        isPaused,
+        audioProcessor: !!audioProcessor,
+        micMediaStream: !!micMediaStream,
+        systemAudioStream: !!systemAudioStream,
+        pausedProcessors: pausedProcessors.length,
+        audioContext: audioContext?.state,
+        systemAudioContext: systemAudioContext?.state
+    });
     resumeMicrophoneCapture();
     
     // AGGRESSIVE FIX: Force check isPaused after a delay
     setTimeout(() => {
         console.log('[listenCapture] POST-RESUME CHECK: isPaused =', isPaused);
+        console.log('[listenCapture] POST-RESUME audioContext state:', audioContext?.state);
+        console.log('[listenCapture] POST-RESUME micMediaStream active:', micMediaStream?.active);
         if (isPaused) {
             console.error('[listenCapture] 🚨 ERROR: isPaused is STILL TRUE after resume!');
             console.error('[listenCapture] 🚨 FORCING isPaused = false');
@@ -914,7 +928,22 @@ let lastAudioSentTime = Date.now();
 let audioStuckCounter = 0;
 
 setInterval(() => {
-    console.log('[listenCapture] PERIODIC CHECK: isPaused =', isPaused, 'audioProcessor =', !!audioProcessor);
+    const trackInfo = micMediaStream ? micMediaStream.getTracks().map(t => ({
+        kind: t.kind,
+        enabled: t.enabled,
+        muted: t.muted,
+        readyState: t.readyState
+    })) : [];
+    
+    console.log('[listenCapture] PERIODIC CHECK:', {
+        isPaused,
+        audioProcessor: !!audioProcessor,
+        micStreamActive: micMediaStream?.active,
+        tracks: trackInfo,
+        audioContextState: audioContext?.state,
+        systemAudioContextState: systemAudioContext?.state,
+        timeSinceLastAudio: Math.round((Date.now() - lastAudioSentTime) / 1000) + 's'
+    });
     
     // FAILSAFE: Detect if audio is stuck
     if (!isPaused && audioProcessor && micMediaStream?.active) {

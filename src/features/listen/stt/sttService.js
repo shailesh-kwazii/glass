@@ -286,6 +286,16 @@ class SttService {
     }
 
     async sendAudioContent(data, mimeType) {
+        // Log every 50th call to track if audio is being received
+        if (!this._audioCallCounter) this._audioCallCounter = 0;
+        this._audioCallCounter++;
+        
+        if (this._audioCallCounter % 50 === 0) {
+            console.log('[SttService] sendAudioContent called', this._audioCallCounter, 'times since start');
+            console.log('[SttService] Audio data size:', data?.length || 0);
+            console.log('[SttService] Current timestamp:', new Date().toISOString());
+        }
+        
         const provider = await this.getAiProvider();
         const isGemini = provider === 'gemini';
         
@@ -305,6 +315,9 @@ class SttService {
 
         try {
             await this.mySttSession.sendRealtimeInput(payload);
+            // Update last successful send time
+            this._lastAudioSendTime = Date.now();
+            
             // Log successful audio send occasionally
             if (Math.random() < 0.01) {
                 console.log('[SttService] Successfully sent audio to mySttSession');
