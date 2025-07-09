@@ -277,20 +277,25 @@ class ContinuousListenService {
         // Give windows time to initialize
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // First, broadcast the state update to ensure UI is ready
-        console.log('[ContinuousListenService] Broadcasting state update BEFORE audio resume');
-        this.sendToRenderer('continuous-listen-state', { 
-            isListening: this.isListening, 
-            isPaused: false,
-            isProcessing: this.isProcessingLLM 
-        });
-        
-        // Then update internal state
+        // Update internal state FIRST
         this.isPaused = false;
         
-        // Add a small delay to ensure UI has processed the state update
-        console.log('[ContinuousListenService] Waiting 100ms for UI to process state update...');
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Send multiple state updates to ensure all windows receive it
+        console.log('[ContinuousListenService] Broadcasting state update BEFORE audio resume');
+        for (let i = 0; i < 3; i++) {
+            this.sendToRenderer('continuous-listen-state', { 
+                isListening: this.isListening, 
+                isPaused: false,
+                isProcessing: this.isProcessingLLM 
+            });
+            if (i < 2) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        }
+        
+        // Add a delay to ensure UI has processed the state update
+        console.log('[ContinuousListenService] Waiting 200ms for UI to process state update...');
+        await new Promise(resolve => setTimeout(resolve, 200));
         
         // Resume audio capture
         if (this.sttService) {
@@ -298,17 +303,22 @@ class ContinuousListenService {
             await this.sttService.resumeAudioCapture();
             console.log('[ContinuousListenService] sttService.resumeAudioCapture() completed');
             
-            // AGGRESSIVE: Send resume signal multiple times to ensure it's received
-            console.log('[ContinuousListenService] AGGRESSIVE: Sending resume signal again after 200ms');
-            setTimeout(() => {
-                console.log('[ContinuousListenService] Second resume signal...');
+            // Send resume signal multiple times to ensure it's received
+            console.log('[ContinuousListenService] Sending multiple resume signals...');
+            for (let i = 0; i < 3; i++) {
                 this.sttService.sendToRenderer('resume-microphone-capture');
-            }, 200);
+                if (i < 2) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
             
-            setTimeout(() => {
-                console.log('[ContinuousListenService] Third resume signal...');
-                this.sttService.sendToRenderer('resume-microphone-capture');
-            }, 500);
+            // Final state broadcast after audio is resumed
+            await new Promise(resolve => setTimeout(resolve, 100));
+            this.sendToRenderer('continuous-listen-state', { 
+                isListening: this.isListening, 
+                isPaused: false,
+                isProcessing: this.isProcessingLLM 
+            });
         } else {
             console.error('[ContinuousListenService] ERROR: sttService is null!');
         }

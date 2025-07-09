@@ -372,13 +372,17 @@ function setupMicProcessing(micStream) {
                     console.error('[listenCapture] RACE CONDITION: isPaused changed to true!');
                     return;
                 }
-                console.log('[listenCapture] Sending MIC audio chunk, size:', base64Data.length);
+                if (Math.random() < 0.02) { // Log 2% of the time
+                    console.log('[listenCapture] Sending MIC audio chunk, size:', base64Data.length);
+                }
                 await ipcRenderer.invoke('send-audio-content', {
                     data: base64Data,
                     mimeType: 'audio/pcm;rate=24000',
                 });
             } else {
-                console.log('[listenCapture] MIC audio BLOCKED - isPaused is true');
+                if (Math.random() < 0.1) { // Log 10% of the time when blocked
+                    console.log('[listenCapture] MIC audio BLOCKED - isPaused is true');
+                }
                 // AGGRESSIVE: Check if we should be paused
                 if (window.listenCaptureForceResume) {
                     console.warn('[listenCapture] FORCE RESUME DETECTED - overriding isPaused');
@@ -937,6 +941,10 @@ const originalInvoke = ipcRenderer.invoke;
 ipcRenderer.invoke = function(...args) {
     if (args[0] === 'send-audio-content') {
         lastAudioSentTime = Date.now();
+        // Log successful audio send for debugging
+        if (Math.random() < 0.05) { // 5% of the time
+            console.log('[listenCapture] Audio sent successfully at', new Date().toISOString());
+        }
     }
     return originalInvoke.apply(this, args);
 };

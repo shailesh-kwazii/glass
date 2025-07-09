@@ -153,7 +153,8 @@ export class SttView extends LitElement {
         console.log('[SttView] Previous state:', { _isPaused: this._isPaused, _isProcessing: this._isProcessing, _wasPaused: this._wasPaused });
         console.log('[SttView] Current messages count:', this.sttMessages.length);
         
-        // Update internal state tracking
+        // Update internal state tracking IMMEDIATELY
+        const wasResuming = this._isPaused && !isPaused;
         this._isPaused = isPaused;
         this._isProcessing = isProcessing || false;
         
@@ -168,6 +169,17 @@ export class SttView extends LitElement {
             this._pendingMessages = [];
             console.log('[SttView] Cleared', pendingCount, 'pending messages');
             console.log('[SttView] Messages after clear:', this.sttMessages.length);
+        }
+        
+        // If we're resuming, process any pending messages that were blocked
+        if (wasResuming && this._pendingMessages.length > 0) {
+            console.log('[SttView] Processing', this._pendingMessages.length, 'pending messages after resume');
+            const pending = [...this._pendingMessages];
+            this._pendingMessages = [];
+            // Process each pending message
+            pending.forEach(msg => {
+                this.handleSttUpdate(null, msg);
+            });
         }
         
         // Update the pause state tracker
@@ -193,7 +205,7 @@ export class SttView extends LitElement {
         }
     }
 
-    handleSttUpdate(event, { speaker, text, isFinal, isPartial, messageId }) {
+    handleSttUpdate(event, { speaker, text, isFinal, isPartial, messageId, timestamp }) {
         console.log('[SttView] handleSttUpdate received:', { speaker, text, isFinal, isPartial, messageId });
         console.log('[SttView] Current state:', { _isPaused: this._isPaused, _isProcessing: this._isProcessing });
         
@@ -203,7 +215,7 @@ export class SttView extends LitElement {
         if ((this._isPaused || this._isProcessing) && speaker?.toLowerCase() !== 'ai') {
             console.log('[SttView] BLOCKING update - paused or processing');
             // Store message for later if needed, but don't display
-            this._pendingMessages.push({ speaker, text, isFinal, isPartial, messageId });
+            this._pendingMessages.push({ speaker, text, isFinal, isPartial, messageId, timestamp });
             return;
         }
         
