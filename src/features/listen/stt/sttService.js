@@ -29,6 +29,9 @@ class SttService {
         // Callbacks
         this.onTranscriptionComplete = null;
         this.onStatusUpdate = null;
+        
+        // Track if we're in systemAudioOnly mode
+        this.systemAudioOnly = false;
     }
 
     setCallbacks({ onTranscriptionComplete, onStatusUpdate }) {
@@ -271,10 +274,12 @@ class SttService {
 
         if (options.systemAudioOnly) {
             // Only initialize system audio session for continuous listening
+            this.systemAudioOnly = true;
             this.theirSttSession = await createSTT(provider, { ...sttOptions, callbacks: theirSttConfig.callbacks });
             console.log('✅ System audio STT session initialized successfully.');
         } else {
             // Initialize both sessions for normal listening
+            this.systemAudioOnly = false;
             [this.mySttSession, this.theirSttSession] = await Promise.all([
                 createSTT(provider, { ...sttOptions, callbacks: mySttConfig.callbacks }),
                 createSTT(provider, { ...sttOptions, callbacks: theirSttConfig.callbacks }),
@@ -296,6 +301,14 @@ class SttService {
             console.log('[SttService] Current timestamp:', new Date().toISOString());
         }
         
+        // In systemAudioOnly mode, we don't have a mySttSession, so just return
+        if (this.systemAudioOnly) {
+            if (Math.random() < 0.01) {
+                console.log('[SttService] Skipping sendAudioContent in systemAudioOnly mode');
+            }
+            return;
+        }
+        
         const provider = await this.getAiProvider();
         const isGemini = provider === 'gemini';
         
@@ -304,7 +317,8 @@ class SttService {
             console.error('[SttService] Session states:', {
                 mySttSession: !!this.mySttSession,
                 theirSttSession: !!this.theirSttSession,
-                isSessionActive: this.isSessionActive()
+                isSessionActive: this.isSessionActive(),
+                systemAudioOnly: this.systemAudioOnly
             });
             throw new Error('User STT session not active');
         }
@@ -516,6 +530,11 @@ class SttService {
     }
 
     isSessionActive() {
+        // In systemAudioOnly mode, we only need theirSttSession
+        if (this.systemAudioOnly) {
+            return !!this.theirSttSession;
+        }
+        // In normal mode, we need both sessions
         return !!this.mySttSession && !!this.theirSttSession;
     }
 
@@ -560,6 +579,7 @@ class SttService {
         this.theirLastPartialText = '';
         this.myCompletionBuffer = '';
         this.theirCompletionBuffer = '';
+        this.systemAudioOnly = false;
     }
 
     sendToRenderer(channel, data) {
