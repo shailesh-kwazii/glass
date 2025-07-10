@@ -115,6 +115,11 @@ export class SttView extends LitElement {
         this._isPaused = false;
         this._isProcessing = false;
         this._pendingMessages = [];
+        
+        // Deduplication tracking
+        this._processedMessageIds = new Set();
+        this._recentMessageHashes = new Map(); // For messages without IDs
+        this._hashCleanupInterval = null;
 
         this.handleSttUpdate = this.handleSttUpdate.bind(this);
         this.handleConversationUpdate = this.handleConversationUpdate.bind(this);
@@ -129,6 +134,11 @@ export class SttView extends LitElement {
             ipcRenderer.on('stt-conversation-update', this.handleConversationUpdate);
             ipcRenderer.on('continuous-listen-state', this.handleListenStateChange);
         }
+        
+        // Clean up old message hashes every 5 minutes
+        this._hashCleanupInterval = setInterval(() => {
+            this.cleanupOldMessageHashes();
+        }, 5 * 60 * 1000);
     }
 
     disconnectedCallback() {
@@ -139,12 +149,84 @@ export class SttView extends LitElement {
             ipcRenderer.removeListener('stt-conversation-update', this.handleConversationUpdate);
             ipcRenderer.removeListener('continuous-listen-state', this.handleListenStateChange);
         }
+        
+        if (this._hashCleanupInterval) {
+            clearInterval(this._hashCleanupInterval);
+            this._hashCleanupInterval = null;
+        }
     }
 
     // Handle session reset from parent
     resetTranscript() {
         this.sttMessages = [];
+        this._processedMessageIds.clear();
+        this._recentMessageHashes.clear();
+        this._pendingMessages = [];
         this.requestUpdate();
+    }
+    
+    // Generate a hash for message deduplication
+    generateMessageHash(speaker, text, timestamp) {
+        // Create a unique hash from speaker, text, and timestamp
+        const data = `${speaker}|${text}|${timestamp || Date.now()}`;
+        return data;
+    }
+    
+    // Clean up old message hashes to prevent memory leak
+    cleanupOldMessageHashes() {
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        for (const [hash, timestamp] of this._recentMessageHashes.entries()) {
+            if (timestamp < fiveMinutesAgo) {
+                this._recentMessageHashes.delete(hash);
+            }
+        }
+    }
+    
+    // Check if a message is a duplicate
+    isDuplicateMessage(speaker, text, messageId, timestamp) {
+        // Check by messageId if available
+        if (messageId !== undefined && this._processedMessageIds.has(messageId)) {
+            console.log('[SttView] Duplicate detected by messageId:', messageId);
+            return true;
+        }
+        
+        // Check by content hash for messages without ID
+        const hash = this.generateMessageHash(speaker, text, timestamp);
+        if (this._recentMessageHashes.has(hash)) {
+            const existingTimestamp = this._recentMessageHashes.get(hash);
+            // Allow if timestamp is significantly different (more than 2 seconds)
+            if (timestamp && existingTimestamp && Math.abs(timestamp - existingTimestamp) > 2000) {
+                console.log('[SttView] Same content but different time, allowing');
+                return false;
+            }
+            console.log('[SttView] Duplicate detected by hash');
+            return true;
+        }
+        
+        // Additional check: look for exact same text in last few messages
+        // This catches duplicates that might have different timestamps
+        const recentSameSpaker = this.sttMessages
+            .slice(-10)
+            .filter(msg => msg.speaker === speaker && msg.isFinal);
+            
+        const hasSameText = recentSameSpaker.some(msg => msg.text === text);
+        if (hasSameText) {
+            console.log('[SttView] Duplicate detected by recent message text comparison');
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // Mark message as processed
+    markMessageAsProcessed(speaker, text, messageId, timestamp) {
+        if (messageId !== undefined) {
+            this._processedMessageIds.add(messageId);
+        }
+        
+        // Use the provided timestamp or current time
+        const hash = this.generateMessageHash(speaker, text, timestamp);
+        this._recentMessageHashes.set(hash, timestamp || Date.now());
     }
     
     handleListenStateChange(event, { isListening, isPaused, isProcessing }) {
@@ -158,28 +240,14 @@ export class SttView extends LitElement {
         this._isPaused = isPaused;
         this._isProcessing = isProcessing || false;
         
-        // Clear messages when resuming from pause (going from paused to not paused while listening)
+        // When resuming from pause, only clear pending messages, NOT the transcript
         if (isListening && !isPaused && this._wasPaused) {
-            console.log('[SttView] RESUMING FROM PAUSE - clearing transcript');
-            console.log('[SttView] Messages before clear:', this.sttMessages.length);
-            // Resuming from pause - clear the transcript
-            this.resetTranscript();
-            // Clear any pending messages
+            console.log('[SttView] RESUMING FROM PAUSE - clearing pending messages only');
+            // Clear any pending messages that were blocked during pause
             const pendingCount = this._pendingMessages.length;
             this._pendingMessages = [];
             console.log('[SttView] Cleared', pendingCount, 'pending messages');
-            console.log('[SttView] Messages after clear:', this.sttMessages.length);
-        }
-        
-        // If we're resuming, process any pending messages that were blocked
-        if (wasResuming && this._pendingMessages.length > 0) {
-            console.log('[SttView] Processing', this._pendingMessages.length, 'pending messages after resume');
-            const pending = [...this._pendingMessages];
-            this._pendingMessages = [];
-            // Process each pending message
-            pending.forEach(msg => {
-                this.handleSttUpdate(null, msg);
-            });
+            // Do NOT clear the transcript or processed message tracking
         }
         
         // Update the pause state tracker
@@ -197,6 +265,10 @@ export class SttView extends LitElement {
             this.sttMessages = messages;
             this._shouldScrollAfterUpdate = true;
             
+            // Clear deduplication tracking since we're loading a new conversation
+            this._processedMessageIds.clear();
+            this._recentMessageHashes.clear();
+            
             // Notify parent component about the update
             this.dispatchEvent(new CustomEvent('conversation-updated', {
                 detail: { messages, conversationText, screenshot },
@@ -206,16 +278,45 @@ export class SttView extends LitElement {
     }
 
     handleSttUpdate(event, { speaker, text, isFinal, isPartial, messageId, timestamp }) {
-        console.log('[SttView] handleSttUpdate received:', { speaker, text, isFinal, isPartial, messageId });
+        console.log('[SttView] handleSttUpdate received:', { 
+            speaker, 
+            text: text?.substring(0, 50) + (text?.length > 50 ? '...' : ''), 
+            isFinal, 
+            isPartial, 
+            messageId,
+            timestamp,
+            source: event?.sender?.id || 'unknown'
+        });
         console.log('[SttView] Current state:', { _isPaused: this._isPaused, _isProcessing: this._isProcessing });
         
-        if (text === undefined) return;
+        if (text === undefined || text === null || text === '') return;
+        
+        // Enhanced duplicate detection for both partial and final messages
+        const isDuplicate = this.isDuplicateMessage(speaker, text, messageId, timestamp);
+        
+        // For partial messages, also check if this exact text already exists in recent messages
+        if (isPartial && !isDuplicate) {
+            // Check last few messages for exact text match
+            const recentMessages = this.sttMessages.slice(-5);
+            const exactMatch = recentMessages.some(msg => 
+                msg.speaker === speaker && 
+                msg.text === text &&
+                msg.isFinal
+            );
+            if (exactMatch) {
+                console.log('[SttView] Skipping partial - exact match found in recent messages');
+                return;
+            }
+        }
+        
+        if (isDuplicate) {
+            console.log('[SttView] Skipping duplicate message');
+            return;
+        }
         
         // CRITICAL: Block ALL non-AI updates during pause or processing
         if ((this._isPaused || this._isProcessing) && speaker?.toLowerCase() !== 'ai') {
             console.log('[SttView] BLOCKING update - paused or processing');
-            // Store message for later if needed, but don't display
-            this._pendingMessages.push({ speaker, text, isFinal, isPartial, messageId, timestamp });
             return;
         }
         
@@ -252,14 +353,22 @@ export class SttView extends LitElement {
                     isFinal: false,
                 };
             } else {
-                newMessages.push({
-                    id: this.messageIdCounter++,
-                    messageId: messageId,
-                    speaker,
-                    text,
-                    isPartial: true,
-                    isFinal: false,
-                });
+                // Check if we already have this exact partial text to avoid duplicates
+                const existingPartial = newMessages.find(msg => 
+                    msg.speaker === speaker && 
+                    msg.text === text && 
+                    msg.isPartial
+                );
+                if (!existingPartial) {
+                    newMessages.push({
+                        id: this.messageIdCounter++,
+                        messageId: messageId,
+                        speaker,
+                        text,
+                        isPartial: true,
+                        isFinal: false,
+                    });
+                }
             }
         } else if (isFinal) {
             if (targetIdx !== -1) {
@@ -279,6 +388,9 @@ export class SttView extends LitElement {
                     isFinal: true,
                 });
             }
+            
+            // Mark this final message as processed to prevent duplicates
+            this.markMessageAsProcessed(speaker, text, messageId, timestamp);
         }
 
         this.sttMessages = newMessages;
