@@ -44,8 +44,8 @@ let currentDisplayId = null;
 
 let mouseEventsIgnored = false;
 let lastVisibleWindows = new Set(['header']);
-const HEADER_HEIGHT = 47;
-const DEFAULT_WINDOW_WIDTH = 353;
+const HEADER_HEIGHT = 56;
+const DEFAULT_WINDOW_WIDTH = 424;
 
 let currentHeaderState = 'apikey';
 const windowPool = new Map();
@@ -91,8 +91,8 @@ function createFeatureWindows(header) {
 
     // listen
     const listen = new BrowserWindow({
-        ...commonChildOptions, width:400,minWidth:400,maxWidth:400,
-        maxHeight:700,
+        ...commonChildOptions, width:480,minWidth:480,maxWidth:480,
+        maxHeight:840,
     });
     listen.setContentProtection(isContentProtectionOn);
     listen.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
@@ -131,7 +131,7 @@ function createFeatureWindows(header) {
     }
 
     // ask
-    const ask = new BrowserWindow({ ...commonChildOptions, width:600 });
+    const ask = new BrowserWindow({ ...commonChildOptions, width:720 });
     ask.setContentProtection(isContentProtectionOn);
     ask.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
     if (process.platform === 'darwin') {
@@ -167,7 +167,7 @@ function createFeatureWindows(header) {
     windowPool.set('ask', ask);
 
     // settings
-    const settings = new BrowserWindow({ ...commonChildOptions, width:240, maxHeight:400, parent:undefined });
+    const settings = new BrowserWindow({ ...commonChildOptions, width:288, maxHeight:480, parent:undefined });
     settings.setContentProtection(isContentProtectionOn);
     settings.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
     if (process.platform === 'darwin') {

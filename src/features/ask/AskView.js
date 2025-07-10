@@ -169,7 +169,7 @@ export class AskView extends LitElement {
             flex-direction: column;
             height: 100%;
             width: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.8);
             border-radius: 12px;
             outline: 0.5px rgba(255, 255, 255, 0.3) solid;
             outline-offset: -1px;
