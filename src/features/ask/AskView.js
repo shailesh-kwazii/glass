@@ -1468,7 +1468,10 @@ export class AskView extends LitElement {
 
                 const idealHeight = headerHeight + responseHeight + inputHeight;
 
-                const targetHeight = Math.min(700, idealHeight);
+                // Get screen height to calculate 70% maximum
+                const screenHeight = window.screen.availHeight || window.screen.height;
+                const maxHeight = Math.round(screenHeight * 0.7);
+                const targetHeight = Math.min(maxHeight, idealHeight);
 
                 const { ipcRenderer } = window.require('electron');
                 ipcRenderer.invoke('adjust-window-height', targetHeight);

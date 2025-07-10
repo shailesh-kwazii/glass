@@ -93,13 +93,17 @@ function createFeatureWindows(header) {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width: screenWidth, height: screenHeight } = primaryDisplay.workArea;
     
+    // Calculate 70% of screen dimensions
+    const listenWidth = Math.round(screenWidth * 0.7);
+    const listenHeight = Math.round(screenHeight * 0.7);
+    
     const listen = new BrowserWindow({
         ...commonChildOptions, 
-        width: screenWidth,
-        minWidth: screenWidth,
-        maxWidth: screenWidth,
-        height: screenHeight,
-        maxHeight: screenHeight,
+        width: listenWidth,
+        minWidth: listenWidth,
+        maxWidth: listenWidth,
+        height: listenHeight,
+        maxHeight: listenHeight,
     });
     listen.setContentProtection(isContentProtectionOn);
     listen.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
@@ -130,8 +134,10 @@ function createFeatureWindows(header) {
 
     windowPool.set('listen', listen);
     
-    // Position listen window at top-left of screen
-    listen.setPosition(0, 0);
+    // Center the listen window on screen
+    const listenX = Math.round((screenWidth - listenWidth) / 2);
+    const listenY = Math.round((screenHeight - listenHeight) / 2);
+    listen.setPosition(listenX, listenY);
     
     // If continuous listening is already active, show the window
     if (global.continuousListenService && global.continuousListenService.getContinuousListeningState()) {
@@ -141,7 +147,8 @@ function createFeatureWindows(header) {
     }
 
     // ask
-    const ask = new BrowserWindow({ ...commonChildOptions, width:720 });
+    const askWidth = Math.round(screenWidth * 0.7);
+    const ask = new BrowserWindow({ ...commonChildOptions, width: askWidth });
     ask.setContentProtection(isContentProtectionOn);
     ask.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
     if (process.platform === 'darwin') {
@@ -177,7 +184,10 @@ function createFeatureWindows(header) {
     windowPool.set('ask', ask);
 
     // settings
-    const settings = new BrowserWindow({ ...commonChildOptions, width:288, maxHeight:480, parent:undefined });
+    // Settings window stays smaller - about 20% of screen width
+    const settingsWidth = Math.round(screenWidth * 0.2);
+    const settingsMaxHeight = Math.round(screenHeight * 0.5);
+    const settings = new BrowserWindow({ ...commonChildOptions, width: settingsWidth, maxHeight: settingsMaxHeight, parent:undefined });
     settings.setContentProtection(isContentProtectionOn);
     settings.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
     if (process.platform === 'darwin') {
