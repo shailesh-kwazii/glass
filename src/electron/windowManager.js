@@ -328,13 +328,14 @@ function createWindows() {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { x: workAreaX, y: workAreaY, width: screenWidth, height: screenHeight } = primaryDisplay.workArea;
 
-    // Make window span entire screen width
-    const initialX = workAreaX;
+    // Make window span 70% of screen width
+    const headerWidth = Math.round(screenWidth * 0.7);
+    const initialX = workAreaX + Math.round((screenWidth - headerWidth) / 2);  // Center the header
     const initialY = workAreaY + 21;
     movementManager = new SmoothMovementManager(windowPool, getDisplayById, getCurrentDisplay, updateLayout);
     
     const header = new BrowserWindow({
-        width: screenWidth,  // Span entire screen width
+        width: headerWidth,  // 70% of screen width
         height: HEADER_HEIGHT,
         x: initialX,
         y: initialY,
@@ -690,8 +691,10 @@ function setupIpcHandlers(movementManager) {
             const { x: workAreaX, y: workAreaY, width: screenWidth } = currentDisplay.workArea;
             const bounds = header.getBounds();
             
-            // Update to span full width of the changed display
-            header.setBounds({ x: workAreaX, y: bounds.y, width: screenWidth, height: bounds.height });
+            // Update to span 70% width of the changed display
+            const headerWidth = Math.round(screenWidth * 0.7);
+            const centerX = workAreaX + Math.round((screenWidth - headerWidth) / 2);
+            header.setBounds({ x: centerX, y: bounds.y, width: headerWidth, height: bounds.height });
         }
         
         updateLayout();
@@ -905,8 +908,10 @@ function setupIpcHandlers(movementManager) {
             const { x: workAreaX, width: screenWidth } = currentDisplay.workArea;
             const bounds = header.getBounds();
 
-            // Always span full screen width
-            header.setBounds({ x: workAreaX, y: bounds.y, width: screenWidth, height });
+            // Always use 70% of screen width
+            const headerWidth = Math.round(screenWidth * 0.7);
+            const centerX = workAreaX + Math.round((screenWidth - headerWidth) / 2);
+            header.setBounds({ x: centerX, y: bounds.y, width: headerWidth, height });
 
             if (!wasResizable) {
                 header.setResizable(false);

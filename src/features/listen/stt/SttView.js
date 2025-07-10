@@ -11,7 +11,7 @@ export class SttView extends LitElement {
 
         .transcription-container {
             overflow-y: auto;
-            padding: 12px 12px 16px 12px;
+            padding: 24px 20px 24px 20px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -47,7 +47,7 @@ export class SttView extends LitElement {
             word-break: break-word;
             line-height: 1.5;
             font-size: 15px;
-            margin-bottom: 4px;
+            margin-bottom: 20px;
             box-sizing: border-box;
         }
 
@@ -442,7 +442,9 @@ export class SttView extends LitElement {
 
         // Additional UI-level guard: Don't show non-AI messages during pause/processing
         const displayMessages =
-            this._isPaused || this._isProcessing ? this.sttMessages.filter(msg => msg.speaker?.toLowerCase() === 'ai') : this.sttMessages;
+            this._isPaused || this._isProcessing
+                ? this.sttMessages.filter(msg => msg.speaker?.toLowerCase() === 'ai').slice(-1)
+                : this.sttMessages.filter(msg => msg.speaker?.toLowerCase() != 'ai');
 
         console.log('[SttView] Displaying', displayMessages.length, 'messages out of', this.sttMessages.length, 'total');
 
