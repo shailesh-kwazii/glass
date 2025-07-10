@@ -524,6 +524,7 @@ class ContinuousListenService {
                 ? getSystemPrompt('interview_assistant' /*'pickle_glass'*/, conversationText, false)
                 : 'You are a helpful AI assistant. Provide useful insights and assistance based on the context provided.';
 
+            console.log('[sendToLLM] System prompt:', systemPrompt);
             // Prepare messages for LLM
             const messages = [
                 { role: 'system', content: systemPrompt },

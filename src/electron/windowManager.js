@@ -90,9 +90,16 @@ function createFeatureWindows(header) {
     };
 
     // listen
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width: screenWidth, height: screenHeight } = primaryDisplay.workArea;
+    
     const listen = new BrowserWindow({
-        ...commonChildOptions, width:480,minWidth:480,maxWidth:480,
-        maxHeight:840,
+        ...commonChildOptions, 
+        width: screenWidth,
+        minWidth: screenWidth,
+        maxWidth: screenWidth,
+        height: screenHeight,
+        maxHeight: screenHeight,
     });
     listen.setContentProtection(isContentProtectionOn);
     listen.setVisibleOnAllWorkspaces(true,{visibleOnFullScreen:true});
@@ -122,6 +129,9 @@ function createFeatureWindows(header) {
 
 
     windowPool.set('listen', listen);
+    
+    // Position listen window at top-left of screen
+    listen.setPosition(0, 0);
     
     // If continuous listening is already active, show the window
     if (global.continuousListenService && global.continuousListenService.getContinuousListeningState()) {
@@ -306,14 +316,15 @@ function toggleAllWindowsVisibility(movementManager) {
 
 function createWindows() {
     const primaryDisplay = screen.getPrimaryDisplay();
-    const { y: workAreaY, width: screenWidth } = primaryDisplay.workArea;
+    const { x: workAreaX, y: workAreaY, width: screenWidth, height: screenHeight } = primaryDisplay.workArea;
 
-    const initialX = Math.round((screenWidth - DEFAULT_WINDOW_WIDTH) / 2);
+    // Make window span entire screen width
+    const initialX = workAreaX;
     const initialY = workAreaY + 21;
     movementManager = new SmoothMovementManager(windowPool, getDisplayById, getCurrentDisplay, updateLayout);
     
     const header = new BrowserWindow({
-        width: DEFAULT_WINDOW_WIDTH,
+        width: screenWidth,  // Span entire screen width
         height: HEADER_HEIGHT,
         x: initialX,
         y: initialY,
@@ -661,6 +672,18 @@ function setupIpcHandlers(movementManager) {
 
     screen.on('display-metrics-changed', (event, display, changedMetrics) => {
         console.log('[Display] Display metrics changed:', display.id, changedMetrics);
+        
+        // Update header window to span new screen dimensions
+        const header = windowPool.get('header');
+        if (header && !header.isDestroyed()) {
+            const currentDisplay = screen.getDisplayNearestPoint(header.getBounds());
+            const { x: workAreaX, y: workAreaY, width: screenWidth } = currentDisplay.workArea;
+            const bounds = header.getBounds();
+            
+            // Update to span full width of the changed display
+            header.setBounds({ x: workAreaX, y: bounds.y, width: screenWidth, height: bounds.height });
+        }
+        
         updateLayout();
     });
 
@@ -868,10 +891,12 @@ function setupIpcHandlers(movementManager) {
                 header.setResizable(true);
             }
 
+            const currentDisplay = screen.getDisplayNearestPoint(header.getBounds());
+            const { x: workAreaX, width: screenWidth } = currentDisplay.workArea;
             const bounds = header.getBounds();
-            const newX = bounds.x + Math.round((bounds.width - width) / 2);
 
-            header.setBounds({ x: newX, y: bounds.y, width, height });
+            // Always span full screen width
+            header.setBounds({ x: workAreaX, y: bounds.y, width: screenWidth, height });
 
             if (!wasResizable) {
                 header.setResizable(false);

@@ -99,7 +99,7 @@ export class AskView extends LitElement {
         }
 
         .response-container pre {
-            background: rgba(0, 0, 0, 0.4) !important;
+            background: rgba(0, 0, 0, 0.9) !important;
             border-radius: 8px !important;
             padding: 12px !important;
             margin: 8px 0 !important;
@@ -1176,10 +1176,10 @@ export class AskView extends LitElement {
         // Show the ask view
         this.classList.remove('hidden', 'hiding');
         this.classList.add('showing');
-        
+
         // Set up the question with conversation history
-        const conversationContext = "Here is the conversation history:\n\n" + data.text;
-        
+        const conversationContext = 'Here is the conversation history:\n\n' + data.text;
+
         this.currentQuestion = conversationContext;
         this.isLoading = true;
         this.showTextInput = false;
@@ -1189,13 +1189,13 @@ export class AskView extends LitElement {
 
         if (window.require) {
             const { ipcRenderer } = window.require('electron');
-            
+
             // Include screenshot if provided
             const messageData = {
                 text: conversationContext,
-                screenshot: data.screenshot
+                screenshot: data.screenshot,
             };
-            
+
             ipcRenderer.invoke('ask:sendMessageWithScreenshot', messageData).catch(error => {
                 console.error('Error processing continuous listen data:', error);
                 this.isLoading = false;
@@ -1335,10 +1335,10 @@ export class AskView extends LitElement {
         }
     }
 
-    focusTextInput(){
+    focusTextInput() {
         requestAnimationFrame(() => {
             const textInput = this.shadowRoot?.getElementById('textInput');
-            if (textInput){
+            if (textInput) {
                 textInput.focus();
             }
         });
@@ -1454,25 +1454,26 @@ export class AskView extends LitElement {
     adjustWindowHeight() {
         if (!window.require) return;
 
-        this.updateComplete.then(() => {
-            const headerEl   = this.shadowRoot.querySelector('.response-header');
-            const responseEl = this.shadowRoot.querySelector('.response-container');
-            const inputEl    = this.shadowRoot.querySelector('.text-input-container');
+        this.updateComplete
+            .then(() => {
+                const headerEl = this.shadowRoot.querySelector('.response-header');
+                const responseEl = this.shadowRoot.querySelector('.response-container');
+                const inputEl = this.shadowRoot.querySelector('.text-input-container');
 
-            if (!headerEl || !responseEl) return;
+                if (!headerEl || !responseEl) return;
 
-            const headerHeight   = headerEl.classList.contains('hidden') ? 0 : headerEl.offsetHeight;
-            const responseHeight = responseEl.scrollHeight;
-            const inputHeight    = (inputEl && !inputEl.classList.contains('hidden')) ? inputEl.offsetHeight : 0;
+                const headerHeight = headerEl.classList.contains('hidden') ? 0 : headerEl.offsetHeight;
+                const responseHeight = responseEl.scrollHeight;
+                const inputHeight = inputEl && !inputEl.classList.contains('hidden') ? inputEl.offsetHeight : 0;
 
-            const idealHeight = headerHeight + responseHeight + inputHeight;
+                const idealHeight = headerHeight + responseHeight + inputHeight;
 
-            const targetHeight = Math.min(700, idealHeight);
+                const targetHeight = Math.min(700, idealHeight);
 
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.invoke('adjust-window-height', targetHeight);
-
-        }).catch(err => console.error('AskView adjustWindowHeight error:', err));
+                const { ipcRenderer } = window.require('electron');
+                ipcRenderer.invoke('adjust-window-height', targetHeight);
+            })
+            .catch(err => console.error('AskView adjustWindowHeight error:', err));
     }
 
     // Throttled wrapper to avoid excessive IPC spam (executes at most once per animation frame)

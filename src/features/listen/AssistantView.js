@@ -5,7 +5,8 @@ export class AssistantView extends LitElement {
     static styles = css`
         :host {
             display: block;
-            width: 400px;
+            width: 100vw;
+            height: 100vh;
             transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
             transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1), opacity 0.2s ease-out;
@@ -89,7 +90,7 @@ export class AssistantView extends LitElement {
             color: #ffffff;
             box-sizing: border-box;
             position: relative;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.9);
             overflow: hidden;
             border-radius: 12px;
             width: 100%;
@@ -121,8 +122,8 @@ export class AssistantView extends LitElement {
             bottom: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.15);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            background: rgba(0, 0, 0, 0.9);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.9);
             border-radius: 12px;
             z-index: -1;
         }
@@ -267,7 +268,7 @@ export class AssistantView extends LitElement {
             font-size: 12px;
             color: rgba(255, 255, 255, 0.7);
         }
-        
+
         /* ────────────────[ GLASS BYPASS ]─────────────── */
         :host-context(body.has-glass) .assistant-container,
         :host-context(body.has-glass) .top-bar,
@@ -277,8 +278,7 @@ export class AssistantView extends LitElement {
         :host-context(body.has-glass) .stt-message,
         :host-context(body.has-glass) .outline-item,
         :host-context(body.has-glass) .request-item,
-        :host-context(body.has-glass) .markdown-content,
- {
+        :host-context(body.has-glass) .markdown-content {
             background: transparent !important;
             border: none !important;
             outline: none !important;
@@ -325,7 +325,7 @@ export class AssistantView extends LitElement {
         :host-context(body.has-glass) ::-webkit-scrollbar-track,
         :host-context(body.has-glass) ::-webkit-scrollbar-thumb {
             background: transparent !important;
-            width: 0 !important;      /* 스크롤바 자체 숨기기 */
+            width: 0 !important; /* 스크롤바 자체 숨기기 */
         }
         :host-context(body.has-glass) .assistant-container,
         :host-context(body.has-glass) .top-bar,
@@ -335,8 +335,7 @@ export class AssistantView extends LitElement {
         :host-context(body.has-glass) .stt-message,
         :host-context(body.has-glass) .outline-item,
         :host-context(body.has-glass) .request-item,
-        :host-context(body.has-glass) .markdown-content,
- {
+        :host-context(body.has-glass) .markdown-content {
             background: transparent !important;
             border: none !important;
             outline: none !important;
@@ -510,7 +509,6 @@ export class AssistantView extends LitElement {
             });
     }
 
-
     handleCopyHover(isHovering) {
         this.isHovering = isHovering;
         if (isHovering) {
@@ -582,9 +580,7 @@ export class AssistantView extends LitElement {
     }
 
     render() {
-        const displayText = this.isHovering
-            ? 'Copy Transcript'
-            : `Glass is Listening ${this.elapsedTime}`;
+        const displayText = this.isHovering ? 'Copy Transcript' : `Glass is Listening ${this.elapsedTime}`;
 
         return html`
             <div class="assistant-container">
@@ -610,10 +606,7 @@ export class AssistantView extends LitElement {
                     </div>
                 </div>
 
-                <stt-view 
-                    .isVisible=${true}
-                    @stt-messages-updated=${this.handleSttMessagesUpdated}
-                ></stt-view>
+                <stt-view .isVisible=${true} @stt-messages-updated=${this.handleSttMessagesUpdated}></stt-view>
             </div>
         `;
     }
